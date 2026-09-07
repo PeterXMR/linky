@@ -3,7 +3,12 @@ import type {
   MintQuoteBolt11Response,
   Proof,
 } from "@cashu/cashu-ts";
-import { Amount as CashuAmount, MintOperationError } from "@cashu/cashu-ts";
+import type { GetInfoResponse } from "@cashu/cashu-ts";
+import {
+  Amount as CashuAmount,
+  MintInfo as CashuMintInfo,
+  MintOperationError,
+} from "@cashu/cashu-ts";
 import { Effect, Exit, Layer, TestClock, TestContext } from "effect";
 import type { Scope } from "effect";
 import {
@@ -135,6 +140,21 @@ const makeHarness = (wallet: LoadedWallet, storage: Storage) => {
     Effect.runPromiseExit(program.pipe(Effect.scoped, Effect.provide(layer)));
   return { run, events: inspector.events };
 };
+
+/** A mint advertising NUT-17 pushes for exactly the topup's method and unit. */
+const websocketMintInfo = (
+  commands: string[] = ["bolt11_mint_quote"],
+): GetInfoResponse => ({
+  name: "Websocket mint",
+  pubkey: "02" + "ab".repeat(32),
+  version: "Nutshell/0.16.0",
+  contact: [],
+  nuts: {
+    "4": { methods: [], disabled: false },
+    "5": { methods: [], disabled: false },
+    "17": { supported: [{ method: "bolt11", unit: "sat", commands }] },
+  },
+});
 
 const draft = new TopupDraft({ mint, amount: Amount.make(16) });
 
@@ -479,6 +499,106 @@ describe("Topup", () => {
     // A reserved counter means the invoice was paid: the record must outlive
     // the failure so the funds stay reclaimable.
     expect(await pendingKeys(storage.kv)).toHaveLength(1);
+  });
+
+  it("settles from a NUT-17 push without the poll ever seeing it paid", async () => {
+    const storage = freshStorage();
+    let cancelled = 0;
+    let pushed = false;
+    const { wallet, mintCounters } = makeWallet({
+      states: [],
+      // The mint answers UNPAID over HTTP until it has pushed the settlement,
+      // so only the subscription can end this topup: the poll's next tick is
+      // 30 s away and the test never moves the clock.
+      check: () => Promise.resolve(quoteResponse(pushed ? "PAID" : "UNPAID")),
+    });
+    const { run, events } = makeHarness(
+      fakeWallet({
+        ...wallet,
+        getMintInfo: () => new CashuMintInfo(websocketMintInfo()),
+        on: {
+          mintQuotePaid: (id, onPaid) => {
+            expect(id).toBe(quoteId);
+            queueMicrotask(() => {
+              pushed = true;
+              onPaid(quoteResponse("PAID"));
+            });
+            return Promise.resolve(() => {
+              cancelled += 1;
+            });
+          },
+        },
+      }),
+      storage,
+    );
+
+    const exit = await run(startAndAwait);
+
+    assert(Exit.isSuccess(exit));
+    expect(exit.value.receipt.amount).toBe(16);
+    expect(mintCounters).toEqual([1]);
+    expect(await pendingKeys(storage.kv)).toEqual([]);
+    // The socket is closed again once it has delivered.
+    expect(cancelled).toBe(1);
+
+    const paid = events.find(
+      (event) => event._tag === "QuoteStateChanged" && event.state === "PAID",
+    );
+    assert(paid?._tag === "QuoteStateChanged");
+    expect(paid.via).toBe("subscription");
+  });
+
+  it("falls back to the poll when the subscription cannot be established", async () => {
+    const storage = freshStorage();
+    const { wallet } = makeWallet({ states: [quoteResponse("PAID")] });
+    const { run, events } = makeHarness(
+      fakeWallet({
+        ...wallet,
+        getMintInfo: () => new CashuMintInfo(websocketMintInfo()),
+        on: {
+          mintQuotePaid: () => Promise.reject(new Error("socket refused")),
+        },
+      }),
+      storage,
+    );
+
+    const exit = await run(
+      Effect.gen(function* () {
+        // The TestClock starts at 0, which is not a UnixSeconds.
+        yield* TestClock.adjust("1000 seconds");
+        return yield* runOnTestClock(startAndAwait, "5 seconds");
+      }).pipe(Effect.provide(TestContext.TestContext)),
+    );
+
+    assert(Exit.isSuccess(exit));
+    expect(exit.value.receipt.amount).toBe(16);
+    const paid = events.find(
+      (event) => event._tag === "QuoteStateChanged" && event.state === "PAID",
+    );
+    assert(paid?._tag === "QuoteStateChanged");
+    expect(paid.via).toBe("poll");
+  });
+
+  it("ignores a websocket that cannot push this method or unit", async () => {
+    const storage = freshStorage();
+    const { wallet } = makeWallet({ states: [quoteResponse("PAID")] });
+    const { run } = makeHarness(
+      fakeWallet({
+        ...wallet,
+        // Proof states only: nothing this topup could subscribe to.
+        getMintInfo: () =>
+          new CashuMintInfo(websocketMintInfo(["proof_state"])),
+        on: {
+          mintQuotePaid: () => Promise.reject(new Error("must not subscribe")),
+        },
+      }),
+      storage,
+    );
+
+    const exit = await run(startAndAwait);
+
+    assert(Exit.isSuccess(exit));
+    expect(exit.value.receipt.amount).toBe(16);
   });
 });
 

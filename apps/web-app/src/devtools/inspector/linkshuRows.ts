@@ -103,7 +103,9 @@ export const linkshuEventToRow = (
         at,
         channel: "cashu",
         tag: event._tag,
-        summary: `${event.flow} quote ${short(event.quoteId)} → ${event.state}`,
+        summary: `${event.flow} quote ${short(event.quoteId)} → ${event.state}${
+          event.via === "subscription" ? " (websocket)" : ""
+        }`,
         links: { quote: event.quoteId },
         context: { mint: event.mint },
         payload: event,

@@ -31,12 +31,12 @@ const topupOnce = (bip39Seed: Bip39Seed) =>
   );
 ```
 
-`start` needs a `Scope`: polling runs as a fiber in that scope. Close the scope and polling stops; the persisted quote stays claimable through `resumePending`.
+`start` needs a `Scope`: the poll and any websocket subscription run as fibers in that scope. Close the scope and both stop; the persisted quote stays claimable through `resumePending`.
 
 ## How it works
 
 1. **Quote.** `start` requests a bolt11 mint quote and persists it **before** returning the handle. Any invoice you can show is one the package can finish or resume.
-2. **Poll.** The quote is polled until the mint reports it paid. Transient failures are tolerated (the device may be offline); a long run of them ends the poll with `MintUnreachable`, and an unknown quote (`MintRejected`) ends it at once.
+2. **Watch.** The quote is polled until the mint reports it paid. Transient failures are tolerated (the device may be offline); a long run of them ends the poll with `MintUnreachable`, and an unknown quote (`MintRejected`) ends it at once. When the mint advertises NUT-17 websockets for the quote's method and unit, a subscription runs alongside and usually reports the settlement first. The poll keeps its full speed regardless, because the subscription is a shortcut and never a dependency: the mint pushes each state once, so a socket the OS tears down while the app is backgrounded loses that push for good, and `mintQuotePaid` never speaks for a quote that is already `ISSUED` — the state a resume after a lost mint response has to see. A push never mints on its own either; the claim re-checks the quote over HTTP under the counter lock.
 3. **Mint under the counter lock.** If the mint says the quote was already issued (a lost response), the proofs are reclaimed via NUT-09 instead of minted twice; proofs already stored resolve to the existing row.
 4. **Persist.** The row is inserted as `accepted` (`topup`), then the record is removed. A crash in between costs one reclaim scan on resume, never funds.
 

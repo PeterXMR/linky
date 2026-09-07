@@ -61,7 +61,7 @@ export class CounterAdvanced extends Schema.TaggedClass<CounterAdvanced>()(
   },
 ) {}
 
-/** A mint/melt quote was observed in a new state while a flow polled it. */
+/** A mint/melt quote was observed in a new state while a flow watched it. */
 export class QuoteStateChanged extends Schema.TaggedClass<QuoteStateChanged>()(
   "QuoteStateChanged",
   {
@@ -69,6 +69,8 @@ export class QuoteStateChanged extends Schema.TaggedClass<QuoteStateChanged>()(
     quoteId: QuoteId,
     mint: MintUrl,
     state: Schema.String,
+    /** Which watcher saw it; absent in rows written before NUT-17. */
+    via: Schema.optional(Schema.Literal("poll", "subscription")),
   },
 ) {}
 

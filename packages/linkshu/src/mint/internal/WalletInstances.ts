@@ -62,6 +62,17 @@ export interface LoadedWallet {
   checkProofsStates(
     proofs: Array<Pick<ProofLike, "secret" | "id">>,
   ): Promise<ProofState[]>;
+  /**
+   * NUT-17 subscriptions. Only the mint-quote command is consumed so far;
+   * widen as verticals need more of `WalletEvents`.
+   */
+  readonly on: {
+    mintQuotePaid(
+      quoteId: string,
+      onPaid: (quote: MintQuoteBolt11Response) => void,
+      onError: (error: Error) => void,
+    ): Promise<() => void>;
+  };
   createMintQuoteBolt11(
     amount: AmountLike,
     description?: string,

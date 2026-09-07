@@ -40,6 +40,10 @@ import type {
   TopupHandle,
   TopupLockingOptions,
 } from "./domain";
+import {
+  awaitMintQuotePaid,
+  supportsMintQuoteSubscription,
+} from "../internal/quoteSubscription";
 import { PendingTopup, pendingTopups } from "./internal/pendingTopup";
 
 /** Bolt11 mint quotes settle in seconds. */
@@ -142,6 +146,36 @@ export class Topup extends Effect.Service<Topup>()("linkshu/Topup", {
         }
       });
 
+    /**
+     * NUT-17 reports the settlement the moment the mint sees it. The poll runs
+     * at full speed regardless: the mint pushes each state once, so a socket
+     * torn down while the app is backgrounded loses that push for good, and
+     * `mintQuotePaid` never speaks for a quote that is already ISSUED. The
+     * subscription only ever shortens the wait; it is never relied upon.
+     */
+    const awaitSettled = (
+      wallet: LoadedWallet,
+      pending: PendingTopup,
+    ): Effect.Effect<void, MintUnreachable | MintRejected | QuoteExpired> => {
+      if (!supportsMintQuoteSubscription(wallet, pending.unit)) {
+        return pollUntilSettled(wallet, pending);
+      }
+      const subscribed = awaitMintQuotePaid(wallet, pending).pipe(
+        Effect.map((quote) => {
+          emitQuoteState(
+            inspector,
+            "topup",
+            pending,
+            quote.state,
+            "subscription",
+          );
+        }),
+        // A socket that fails must not end the topup; the poll decides.
+        Effect.orElse(() => Effect.never),
+      );
+      return Effect.race(pollUntilSettled(wallet, pending), subscribed);
+    };
+
     const claimContext = (
       wallet: LoadedWallet,
       mintConfig: MintProofsConfig | undefined,
@@ -182,7 +216,7 @@ export class Topup extends Effect.Service<Topup>()("linkshu/Topup", {
       Effect.gen(function* () {
         const mintConfig = yield* mintConfigFor(pending, options);
         const wallet = yield* instances.get(pending.mint, pending.unit);
-        yield* pollUntilSettled(wallet, pending);
+        yield* awaitSettled(wallet, pending);
         return yield* mintUnderLock(wallet, pending, mintConfig);
       }).pipe(
         Effect.tapError((error) =>

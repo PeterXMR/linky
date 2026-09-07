@@ -5,6 +5,7 @@ import { createECDH } from "node:crypto";
 import {
   Amount,
   Bolt11Invoice,
+  CurrencyUnit,
   PaidQuoteDraft,
   QuoteId,
   QuoteLockingKey,
@@ -15,8 +16,9 @@ import {
   UnixSeconds,
   runLinkshu,
 } from "../../src";
+import { supportsMintQuoteSubscription } from "../../src/internal/quoteSubscription";
 import { PENDING_TOPUP_KEY_PREFIX } from "../../src/topup/internal/pendingTopup";
-import { durableStorage, mintUrl, randomSeed } from "./helpers";
+import { durableStorage, loadMintWallet, mintUrl, randomSeed } from "./helpers";
 
 describe("topup vertical against the local mint", () => {
   it("drives quote, poll, and mint into one accepted row", async () => {
@@ -250,5 +252,22 @@ describe("adopting externally paid quotes against the local mint", () => {
     const rows = await Effect.runPromise(tokens.loadAll);
     expect(rows).toHaveLength(1);
     expect(rows[0].state).toBe("accepted");
+  });
+});
+
+describe("NUT-17 mint quote subscription against the local mint", () => {
+  // The push itself is covered by unit tests: the dev mint's FakeWallet only
+  // settles a quote once it is polled over HTTP, so no websocket delivers a
+  // settlement here. What only a real mint can prove is that its advertised
+  // NUT-17 support parses into the answer the topup branches on.
+  it("detects the mint's advertised websocket support for bolt11 mint quotes", async () => {
+    const wallet = await loadMintWallet();
+
+    expect(
+      supportsMintQuoteSubscription(wallet, CurrencyUnit.make("sat")),
+    ).toBe(true);
+    expect(
+      supportsMintQuoteSubscription(wallet, CurrencyUnit.make("usd")),
+    ).toBe(false);
   });
 });

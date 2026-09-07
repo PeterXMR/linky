@@ -47,11 +47,12 @@ export const emitQuoteState = (
   flow: QuoteStateChanged["flow"],
   quote: { readonly quoteId: QuoteId; readonly mint: MintUrl },
   state: string,
+  via: NonNullable<QuoteStateChanged["via"]> = "poll",
 ): void => {
   inspector.emit(
     () =>
       new QuoteStateChanged(
-        { flow, quoteId: quote.quoteId, mint: quote.mint, state },
+        { flow, quoteId: quote.quoteId, mint: quote.mint, state, via },
         { disableValidation: true },
       ),
   );
