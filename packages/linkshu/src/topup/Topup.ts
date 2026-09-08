@@ -174,7 +174,7 @@ export class Topup extends Effect.Service<Topup>()("linkshu/Topup", {
         // it falls silent and the poll decides.
         Effect.orElse(() => Effect.never),
       );
-      return Effect.race(pollUntilSettled(wallet, pending), subscribed);
+      return Effect.raceFirst(pollUntilSettled(wallet, pending), subscribed);
     };
 
     const claimContext = (

@@ -40,7 +40,7 @@ const topupOnce = (bip39Seed: Bip39Seed) =>
 3. **Mint under the counter lock.** If the mint says the quote was already issued (a lost response), the proofs are reclaimed via NUT-09 instead of minted twice; proofs already stored resolve to the existing row.
 4. **Persist.** The row is inserted as `accepted` (`topup`), then the record is removed. A crash in between costs one reclaim scan on resume, never funds.
 
-Expiry is decided only by the mint: a quote the mint still reports `UNPAID` after `expiresAt` (or 24 h after creation when the mint sets none) fails with `QuoteExpired`. The record is dropped unless minting had already begun.
+Expiry is decided only by the mint: a quote the mint still reports `UNPAID` after `expiresAt` (or 24 h after creation when the mint sets none) fails with `QuoteExpired`. The record is dropped unless minting had already begun. Poll errors reach `result` and cancel any active subscription; a silent or retrying subscription cannot delay them.
 
 ### `resumePending` — run it at startup
 

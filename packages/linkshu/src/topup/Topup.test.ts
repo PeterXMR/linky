@@ -501,6 +501,133 @@ describe("Topup", () => {
     expect(await pendingKeys(storage.kv)).toHaveLength(1);
   });
 
+  it.each(["QuoteExpired", "MintRejected", "MintUnreachable"])(
+    "surfaces %s and cancels an unsettled NUT-17 subscription",
+    async (errorTag) => {
+      const storage = freshStorage();
+      let checks = 0;
+      let cancelled = 0;
+      let disconnects = 0;
+      const { wallet, mintCounters } = makeWallet({
+        created: quoteResponse("UNPAID", 990),
+        states: [],
+        check: () => {
+          checks += 1;
+          if (errorTag === "MintRejected") {
+            return Promise.reject(
+              new MintOperationError(10000, "quote not found"),
+            );
+          }
+          if (errorTag === "MintUnreachable") {
+            return Promise.reject(new TypeError("Failed to fetch"));
+          }
+          return Promise.resolve(quoteResponse("UNPAID", 990));
+        },
+      });
+      const { run } = makeHarness(
+        fakeWallet({
+          ...wallet,
+          getMintInfo: () => new CashuMintInfo(websocketMintInfo()),
+          mint: {
+            disconnectWebSocket: () => {
+              disconnects += 1;
+            },
+          },
+          on: {
+            mintQuoteUpdates: () =>
+              Promise.resolve(() => {
+                cancelled += 1;
+              }),
+          },
+        }),
+        storage,
+      );
+
+      const exit = await run(
+        Effect.gen(function* () {
+          yield* TestClock.adjust("1000 seconds");
+          return yield* runOnTestClock(
+            Effect.gen(function* () {
+              const outcome = yield* Effect.either(startAndAwait);
+              // Capture cleanup before the outer scope closes.
+              return { outcome, cancelled, disconnects };
+            }).pipe(Effect.timeoutOption("60 seconds")),
+            "5 seconds",
+          );
+        }).pipe(Effect.provide(TestContext.TestContext)),
+      );
+
+      assert(Exit.isSuccess(exit));
+      assert(exit.value._tag === "Some");
+      const result = exit.value.value;
+      assert(result.outcome._tag === "Left");
+      expect(result.outcome.left._tag).toBe(errorTag);
+      expect(result.cancelled).toBe(1);
+      expect(result.disconnects).toBe(1);
+      expect(checks).toBe(errorTag === "MintUnreachable" ? 10 : 1);
+      expect(mintCounters).toEqual([]);
+      expect(await Effect.runPromise(storage.tokens.loadAll)).toEqual([]);
+      expect(await pendingKeys(storage.kv)).toHaveLength(
+        errorTag === "QuoteExpired" ? 0 : 1,
+      );
+    },
+  );
+
+  it("cancels both watchers when the topup scope closes", async () => {
+    const storage = freshStorage();
+    let checks = 0;
+    let cancelled = 0;
+    let disconnects = 0;
+    const { wallet, mintCounters } = makeWallet({
+      states: [],
+      check: () => {
+        checks += 1;
+        return Promise.resolve(quoteResponse("UNPAID"));
+      },
+    });
+    const { run } = makeHarness(
+      fakeWallet({
+        ...wallet,
+        getMintInfo: () => new CashuMintInfo(websocketMintInfo()),
+        mint: {
+          disconnectWebSocket: () => {
+            disconnects += 1;
+          },
+        },
+        on: {
+          mintQuoteUpdates: () =>
+            Promise.resolve(() => {
+              cancelled += 1;
+            }),
+        },
+      }),
+      storage,
+    );
+
+    const exit = await run(
+      Effect.gen(function* () {
+        yield* TestClock.adjust("1000 seconds");
+        yield* runOnTestClock(
+          Effect.scoped(
+            Effect.gen(function* () {
+              yield* (yield* Topup).start(draft);
+              yield* Effect.sleep("1 second");
+            }),
+          ),
+          "1 second",
+        );
+        yield* TestClock.adjust("60 seconds");
+      }).pipe(Effect.provide(TestContext.TestContext)),
+    );
+
+    assert(Exit.isSuccess(exit));
+    expect(checks).toBe(1);
+    expect(cancelled).toBe(1);
+    expect(disconnects).toBe(1);
+    expect(mintCounters).toEqual([]);
+    expect(await pendingKeys(storage.kv)).toHaveLength(1);
+  });
+
   it("settles from a NUT-17 push without the poll ever seeing it paid", async () => {
     const storage = freshStorage();
     let cancelled = 0;
