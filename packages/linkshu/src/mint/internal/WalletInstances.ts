@@ -66,6 +66,15 @@ export interface LoadedWallet {
    * NUT-17 subscriptions. Only the mint-quote command is consumed so far;
    * widen as verticals need more of `WalletEvents`.
    */
+  /**
+   * The mint connection behind this wallet. Only the websocket teardown is
+   * consumed: cashu-ts keeps one socket per mint and leaves it open, which
+   * keeps a plain-Node consumer's event loop alive after the last
+   * subscription is gone.
+   */
+  readonly mint: {
+    disconnectWebSocket(): void;
+  };
   readonly on: {
     mintQuoteUpdates(
       quoteIds: string[],

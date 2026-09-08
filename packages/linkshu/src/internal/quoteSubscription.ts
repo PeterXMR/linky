@@ -11,6 +11,29 @@ import { QUOTE_UNPAID } from "./quoteClaim";
 // on subscribe, so a subscription doubles as a state read — which is what
 // makes re-subscribing after a dropped socket worth doing.
 
+/**
+ * cashu-ts opens one websocket per mint and shares it across subscriptions,
+ * so the socket may only be torn down once the last subscriber is gone —
+ * several pending topups on one mint run at the same time. Leaving it open
+ * instead is not an option: it keeps a plain-Node process from ever exiting.
+ */
+const openSubscriptions = new WeakMap<LoadedWallet, number>();
+
+const retainSocket = (wallet: LoadedWallet): void => {
+  openSubscriptions.set(wallet, (openSubscriptions.get(wallet) ?? 0) + 1);
+};
+
+const releaseSocket = (wallet: LoadedWallet): void => {
+  const open = (openSubscriptions.get(wallet) ?? 1) - 1;
+  openSubscriptions.set(wallet, Math.max(0, open));
+  if (open > 0) return;
+  try {
+    wallet.mint.disconnectWebSocket();
+  } catch {
+    // A socket that cannot be closed is already gone.
+  }
+};
+
 const BOLT11_METHOD = "bolt11";
 const MINT_QUOTE_COMMAND = "bolt11_mint_quote";
 
@@ -61,11 +84,14 @@ const subscribeOnce = (
     (resume) => {
       let cancel: (() => void) | null = null;
       let settled = false;
+      retainSocket(wallet);
 
       const stop = (): void => {
+        if (settled) return;
         settled = true;
         cancel?.();
         cancel = null;
+        releaseSocket(wallet);
       };
 
       const fail = (error: unknown): void => {

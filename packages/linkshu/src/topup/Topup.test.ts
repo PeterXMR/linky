@@ -635,6 +635,44 @@ describe("Topup", () => {
     expect(paid.via).toBe("subscription");
   });
 
+  it("closes the mint socket once the settled topup no longer needs it", async () => {
+    const storage = freshStorage();
+    let disconnects = 0;
+    let pushed = false;
+    const { wallet } = makeWallet({
+      states: [],
+      check: () => Promise.resolve(quoteResponse(pushed ? "PAID" : "UNPAID")),
+    });
+    const { run } = makeHarness(
+      fakeWallet({
+        ...wallet,
+        getMintInfo: () => new CashuMintInfo(websocketMintInfo()),
+        // cashu-ts shares one socket per mint and leaves it open; a plain-Node
+        // consumer would never exit if the topup did not close it.
+        mint: {
+          disconnectWebSocket: () => {
+            disconnects += 1;
+          },
+        },
+        on: {
+          mintQuoteUpdates: (_ids, onUpdate) => {
+            queueMicrotask(() => {
+              pushed = true;
+              onUpdate(quoteResponse("PAID"));
+            });
+            return Promise.resolve(() => undefined);
+          },
+        },
+      }),
+      storage,
+    );
+
+    const exit = await run(startAndAwait);
+
+    assert(Exit.isSuccess(exit));
+    expect(disconnects).toBe(1);
+  });
+
   it("ignores a websocket that cannot push this method or unit", async () => {
     const storage = freshStorage();
     const { wallet } = makeWallet({ states: [quoteResponse("PAID")] });
