@@ -29,15 +29,21 @@ export const inspectOperationWith =
           ),
         ),
       ),
-      Effect.tapError((error) =>
-        Effect.sync(() =>
-          inspector.emit(
-            () =>
-              new OperationFailed(
-                { name, params, error },
-                { disableValidation: true },
-              ),
-          ),
+      inspectFailureWith(inspector, name, params),
+    );
+
+/** The failure half of `inspectOperationWith`, for attempts that are retried. */
+export const inspectFailureWith =
+  (inspector: InspectorService, name: string, params: unknown) =>
+  <A, E, R>(operation: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+    Effect.tapError(operation, (error) =>
+      Effect.sync(() =>
+        inspector.emit(
+          () =>
+            new OperationFailed(
+              { name, params, error },
+              { disableValidation: true },
+            ),
         ),
       ),
     );

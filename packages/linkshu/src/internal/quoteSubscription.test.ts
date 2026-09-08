@@ -7,12 +7,6 @@ import { awaitMintQuoteSettled } from "./quoteSubscription";
 
 const settledStates: Array<"PAID" | "ISSUED"> = ["PAID", "ISSUED"];
 
-vi.hoisted(async () => {
-  const { WebSocket } = await import("ws");
-  vi.stubGlobal("WebSocket", WebSocket);
-});
-afterAll(() => vi.unstubAllGlobals());
-
 describe("mint quote socket lifetime", () => {
   it.each(settledStates)(
     "reconnects an acknowledged subscription and receives replayed %s",

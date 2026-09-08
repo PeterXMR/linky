@@ -7,7 +7,7 @@ import { classifyMintError } from "../mint/internal/WalletInstances";
 import type { LoadedWallet } from "../mint/internal/WalletInstances";
 import { QUOTE_UNPAID } from "./quoteClaim";
 import { Inspector } from "../inspector/Inspector";
-import { OperationFailed } from "../inspector/events";
+import { inspectFailureWith } from "./operations";
 
 type MintSocket = NonNullable<LoadedWallet["mint"]["webSocketConnection"]>;
 type CloseListener = (error: NetworkError) => void;
@@ -16,20 +16,22 @@ type CloseListener = (error: NetworkError) => void;
 // each subscriber from its set on settlement, failure, or interruption.
 const closeListeners = new WeakMap<MintSocket, Set<CloseListener>>();
 
+const registerCloseDispatcher = (socket: MintSocket): Set<CloseListener> => {
+  const listeners = new Set<CloseListener>();
+  closeListeners.set(socket, listeners);
+  socket.onClose((event) => {
+    const error = new NetworkError(`WebSocket closed (code ${event.code})`);
+    for (const listener of [...listeners]) listener(error);
+  });
+  return listeners;
+};
+
 const onSocketClose = (
   socket: MintSocket,
   fail: CloseListener,
 ): (() => void) => {
-  let listeners = closeListeners.get(socket);
-  if (listeners === undefined) {
-    const active = new Set<CloseListener>();
-    listeners = active;
-    closeListeners.set(socket, active);
-    socket.onClose((event) => {
-      const error = new NetworkError(`WebSocket closed (code ${event.code})`);
-      for (const listener of [...active]) listener(error);
-    });
-  }
+  const listeners =
+    closeListeners.get(socket) ?? registerCloseDispatcher(socket);
   listeners.add(fail);
   return () => {
     listeners.delete(fail);
@@ -172,21 +174,10 @@ export const awaitMintQuoteSettled = (
   Effect.gen(function* () {
     const inspector = yield* Inspector.orNoop;
     return yield* subscribeOnce(wallet, quote).pipe(
-      Effect.tapError((error) =>
-        Effect.sync(() =>
-          inspector.emit(
-            () =>
-              new OperationFailed(
-                {
-                  name: "topup.subscribe",
-                  params: { mint: quote.mint, quoteId: quote.quoteId },
-                  error,
-                },
-                { disableValidation: true },
-              ),
-          ),
-        ),
-      ),
+      inspectFailureWith(inspector, "topup.subscribe", {
+        mint: quote.mint,
+        quoteId: quote.quoteId,
+      }),
       Effect.retry(RESUBSCRIBE_SCHEDULE),
     );
   });
