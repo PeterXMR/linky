@@ -1,15 +1,40 @@
 import type { MintQuoteBolt11Response } from "@cashu/cashu-ts";
+import { NetworkError } from "@cashu/cashu-ts";
 import { Duration, Effect, Schedule } from "effect";
 import type { MintRejected, MintUnreachable } from "../domain/errors";
 import type { CurrencyUnit, MintUrl, QuoteId } from "../domain/primitives";
 import { classifyMintError } from "../mint/internal/WalletInstances";
 import type { LoadedWallet } from "../mint/internal/WalletInstances";
 import { QUOTE_UNPAID } from "./quoteClaim";
+import { Inspector } from "../inspector/Inspector";
+import { OperationFailed } from "../inspector/events";
 
-// NUT-17: instead of polling a quote, subscribe and let the mint push its
-// state changes over a websocket. The mint replays the quote's current state
-// on subscribe, so a subscription doubles as a state read — which is what
-// makes re-subscribing after a dropped socket worth doing.
+type MintSocket = NonNullable<LoadedWallet["mint"]["webSocketConnection"]>;
+type CloseListener = (error: NetworkError) => void;
+
+// cashu-ts has no offClose; keep one dispatcher per connection and remove
+// each subscriber from its set on settlement, failure, or interruption.
+const closeListeners = new WeakMap<MintSocket, Set<CloseListener>>();
+
+const onSocketClose = (
+  socket: MintSocket,
+  fail: CloseListener,
+): (() => void) => {
+  let listeners = closeListeners.get(socket);
+  if (listeners === undefined) {
+    const active = new Set<CloseListener>();
+    listeners = active;
+    closeListeners.set(socket, active);
+    socket.onClose((event) => {
+      const error = new NetworkError(`WebSocket closed (code ${event.code})`);
+      for (const listener of [...active]) listener(error);
+    });
+  }
+  listeners.add(fail);
+  return () => {
+    listeners.delete(fail);
+  };
+};
 
 /**
  * cashu-ts opens one websocket per mint and shares it across subscriptions,
@@ -83,12 +108,15 @@ const subscribeOnce = (
   Effect.async<MintQuoteBolt11Response, MintUnreachable | MintRejected>(
     (resume) => {
       let cancel: (() => void) | null = null;
+      let removeCloseListener: (() => void) | null = null;
       let settled = false;
       retainSocket(wallet);
 
       const stop = (): void => {
         if (settled) return;
         settled = true;
+        removeCloseListener?.();
+        removeCloseListener = null;
         cancel?.();
         cancel = null;
         releaseSocket(wallet);
@@ -115,8 +143,17 @@ const subscribeOnce = (
         .then((canceller) => {
           // The subscription may land after the effect was interrupted or the
           // quote already reported settled; either way it must not stay open.
-          if (settled) canceller();
-          else cancel = canceller;
+          if (settled) {
+            canceller();
+            return;
+          }
+          cancel = canceller;
+          const socket = wallet.mint.webSocketConnection;
+          if (socket === undefined) {
+            fail(new NetworkError("Mint websocket unavailable"));
+            return;
+          }
+          removeCloseListener = onSocketClose(socket, fail);
         })
         .catch(fail);
 
@@ -132,4 +169,24 @@ export const awaitMintQuoteSettled = (
   wallet: LoadedWallet,
   quote: { readonly quoteId: QuoteId; readonly mint: MintUrl },
 ): Effect.Effect<MintQuoteBolt11Response, MintUnreachable | MintRejected> =>
-  subscribeOnce(wallet, quote).pipe(Effect.retry(RESUBSCRIBE_SCHEDULE));
+  Effect.gen(function* () {
+    const inspector = yield* Inspector.orNoop;
+    return yield* subscribeOnce(wallet, quote).pipe(
+      Effect.tapError((error) =>
+        Effect.sync(() =>
+          inspector.emit(
+            () =>
+              new OperationFailed(
+                {
+                  name: "topup.subscribe",
+                  params: { mint: quote.mint, quoteId: quote.quoteId },
+                  error,
+                },
+                { disableValidation: true },
+              ),
+          ),
+        ),
+      ),
+      Effect.retry(RESUBSCRIBE_SCHEDULE),
+    );
+  });

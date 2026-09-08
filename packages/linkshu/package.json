@@ -26,9 +26,11 @@
   "devDependencies": {
     "@linky/config": "workspace:*",
     "@types/node": "^24.10.1",
+    "@types/ws": "^8.18.1",
     "eslint": "^9.39.1",
     "prettier": "^3.4.2",
     "typescript": "~5.9.3",
-    "vitest": "^4.0.18"
+    "vitest": "^4.0.18",
+    "ws": "^8.21.3"
   }
 }

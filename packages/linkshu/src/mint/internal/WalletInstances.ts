@@ -21,6 +21,7 @@ import {
   type RestoreConfig,
   type SendConfig,
   type SendResponse,
+  type WSConnection,
 } from "@cashu/cashu-ts";
 import { Effect, Schema } from "effect";
 import { MintRejected, MintUnreachable } from "../../domain/errors";
@@ -62,17 +63,9 @@ export interface LoadedWallet {
   checkProofsStates(
     proofs: Array<Pick<ProofLike, "secret" | "id">>,
   ): Promise<ProofState[]>;
-  /**
-   * NUT-17 subscriptions. Only the mint-quote command is consumed so far;
-   * widen as verticals need more of `WalletEvents`.
-   */
-  /**
-   * The mint connection behind this wallet. Only the websocket teardown is
-   * consumed: cashu-ts keeps one socket per mint and leaves it open, which
-   * keeps a plain-Node consumer's event loop alive after the last
-   * subscription is gone.
-   */
+  /** Shared mint socket: observe disconnects and close it after the last subscriber. */
   readonly mint: {
+    readonly webSocketConnection: Pick<WSConnection, "onClose"> | undefined;
     disconnectWebSocket(): void;
   };
   readonly on: {

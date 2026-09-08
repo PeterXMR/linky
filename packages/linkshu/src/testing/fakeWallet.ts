@@ -26,6 +26,7 @@ export const fakeWallet = (
   send: notUnderTest,
   checkProofsStates: notUnderTest,
   mint: {
+    webSocketConnection: { onClose: () => undefined },
     disconnectWebSocket: () => undefined,
   },
   on: { mintQuoteUpdates: notUnderTest },

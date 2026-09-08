@@ -112,13 +112,15 @@ All in `src/inspector/events.ts`; `LinkshuInspectorEvent` is their union.
 | Tag                     | Fields                                                                               | Emitted when                                                                                                                                                   |
 | ----------------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `OperationSucceeded`    | `name`, `params`, `result`                                                           | A public operation finished.                                                                                                                                   |
-| `OperationFailed`       | `name`, `params`, `error`                                                            | A public operation failed with a typed error (the tagged error object is `error`).                                                                             |
+| `OperationFailed`       | `name`, `params`, `error`                                                            | An operation or subscription attempt failed with a typed error (the tagged error object is `error`).                                                           |
 | `TokenLifecycleChanged` | `rowId`, `from`, `to`, `reason`                                                      | A row was inserted (`from: null`), transitioned, or had its text rewritten (`from === to`).                                                                    |
 | `CounterAdvanced`       | `mint`, `unit`, `keysetId`, `from`, `to`, `reason`                                   | A deterministic counter moved; `reason` is `used`, `collision-recovery`, or `restore`.                                                                         |
 | `QuoteStateChanged`     | `flow`, `quoteId`, `mint`, `state`, `via`                                            | A mint/melt quote was observed in a new state while `topup`, `autoswap`, or `melt` watched it; `via` names the watcher (`poll`, or the NUT-17 `subscription`). |
 | `LightningFeeProbed`    | `mint`, `probeMint`, `meltQuoteId`, `mintQuoteId`, `amount`, `feeReserve`, `percent` | A fee probe measured a mint's Lightning fee.                                                                                                                   |
 
 Operation `name` is `<vertical>.<method>` in camelCase, matching the service and method you called: `receive.receive`, `topup.resumePending`. One operation usually produces several rows — a `send.send` is bracketed by the `CounterAdvanced` and `TokenLifecycleChanged` rows it caused.
+
+`topup.subscribe` is an internal subscription attempt: an `OperationFailed` row records a setup failure or socket close before retrying. Its params contain only `mint` and `quoteId`; normal cancellation emits no failure, and settlement appears as `QuoteStateChanged` with `via: "subscription"`.
 
 Correlate rows by the ids inside `params`/`result`: `rowId` links a lifecycle event to the operation that caused it, `quoteId` links quote-state changes to a topup or melt.
 

@@ -147,11 +147,8 @@ export class Topup extends Effect.Service<Topup>()("linkshu/Topup", {
       });
 
     /**
-     * NUT-17 reports the settlement the moment the mint sees it. The poll runs
-     * at full speed regardless: the mint pushes each state once, so a socket
-     * torn down while the app is backgrounded loses that push for good, and
-     * `mintQuotePaid` never speaks for a quote that is already ISSUED. The
-     * subscription only ever shortens the wait; it is never relied upon.
+     * NUT-17 shortens the wait for settlement. Polling keeps its full speed
+     * because a proxy or CSP may block websockets even when the mint supports them.
      */
     const awaitSettled = (
       wallet: LoadedWallet,

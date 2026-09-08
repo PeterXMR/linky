@@ -529,6 +529,7 @@ describe("Topup", () => {
           ...wallet,
           getMintInfo: () => new CashuMintInfo(websocketMintInfo()),
           mint: {
+            ...wallet.mint,
             disconnectWebSocket: () => {
               disconnects += 1;
             },
@@ -590,6 +591,7 @@ describe("Topup", () => {
         ...wallet,
         getMintInfo: () => new CashuMintInfo(websocketMintInfo()),
         mint: {
+          ...wallet.mint,
           disconnectWebSocket: () => {
             disconnects += 1;
           },
@@ -777,6 +779,7 @@ describe("Topup", () => {
         // cashu-ts shares one socket per mint and leaves it open; a plain-Node
         // consumer would never exit if the topup did not close it.
         mint: {
+          ...wallet.mint,
           disconnectWebSocket: () => {
             disconnects += 1;
           },
