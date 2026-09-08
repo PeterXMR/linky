@@ -67,9 +67,9 @@ export interface LoadedWallet {
    * widen as verticals need more of `WalletEvents`.
    */
   readonly on: {
-    mintQuotePaid(
-      quoteId: string,
-      onPaid: (quote: MintQuoteBolt11Response) => void,
+    mintQuoteUpdates(
+      quoteIds: string[],
+      onUpdate: (quote: MintQuoteBolt11Response) => void,
       onError: (error: Error) => void,
     ): Promise<() => void>;
   };

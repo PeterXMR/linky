@@ -1,16 +1,28 @@
 import type { MintQuoteBolt11Response } from "@cashu/cashu-ts";
-import { Effect } from "effect";
+import { Duration, Effect, Schedule } from "effect";
 import type { MintRejected, MintUnreachable } from "../domain/errors";
 import type { CurrencyUnit, MintUrl, QuoteId } from "../domain/primitives";
 import { classifyMintError } from "../mint/internal/WalletInstances";
 import type { LoadedWallet } from "../mint/internal/WalletInstances";
+import { QUOTE_UNPAID } from "./quoteClaim";
 
 // NUT-17: instead of polling a quote, subscribe and let the mint push its
-// state changes over a websocket. The mint replays the current state on
-// subscribe, so nothing is lost between creating a quote and subscribing.
+// state changes over a websocket. The mint replays the quote's current state
+// on subscribe, so a subscription doubles as a state read — which is what
+// makes re-subscribing after a dropped socket worth doing.
 
 const BOLT11_METHOD = "bolt11";
 const MINT_QUOTE_COMMAND = "bolt11_mint_quote";
+
+/**
+ * A socket the OS tears down while the app is backgrounded takes the pending
+ * subscription with it and the mint pushes each state only once, so the
+ * settlement is missed unless we subscribe again. Backoff caps out because
+ * the poll is carrying the topup meanwhile; this only restores the shortcut.
+ */
+const RESUBSCRIBE_SCHEDULE = Schedule.exponential(Duration.seconds(1)).pipe(
+  Schedule.either(Schedule.spaced(Duration.seconds(30))),
+);
 
 /**
  * Websocket support is per method and unit, so a mint may push bolt11/sat
@@ -36,11 +48,12 @@ export const supportsMintQuoteSubscription = (
 };
 
 /**
- * Resolves with the quote the mint reports as paid. Interrupting the effect
- * cancels the subscription, and a subscription that never establishes fails
- * like any other mint call.
+ * One subscription's lifetime: resolves with the first state that is not
+ * UNPAID, and fails when the socket does. `mintQuoteUpdates` rather than
+ * `mintQuotePaid`, because the latter reports nothing for a quote that is
+ * already ISSUED — the state a resume after a lost mint response must see.
  */
-export const awaitMintQuotePaid = (
+const subscribeOnce = (
   wallet: LoadedWallet,
   quote: { readonly quoteId: QuoteId; readonly mint: MintUrl },
 ): Effect.Effect<MintQuoteBolt11Response, MintUnreachable | MintRejected> =>
@@ -56,22 +69,26 @@ export const awaitMintQuotePaid = (
       };
 
       const fail = (error: unknown): void => {
+        if (settled) return;
         stop();
         resume(Effect.fail(classifyMintError(quote.mint, error)));
       };
 
       wallet.on
-        .mintQuotePaid(
-          quote.quoteId,
-          (paid) => {
+        .mintQuoteUpdates(
+          [quote.quoteId],
+          (update) => {
+            // The state replayed on subscribe is usually still UNPAID; keep
+            // the subscription open until the mint reports the settlement.
+            if (settled || update.state === QUOTE_UNPAID) return;
             stop();
-            resume(Effect.succeed(paid));
+            resume(Effect.succeed(update));
           },
           fail,
         )
         .then((canceller) => {
           // The subscription may land after the effect was interrupted or the
-          // quote already reported paid; either way it must not stay open.
+          // quote already reported settled; either way it must not stay open.
           if (settled) canceller();
           else cancel = canceller;
         })
@@ -80,3 +97,13 @@ export const awaitMintQuotePaid = (
       return Effect.sync(stop);
     },
   );
+
+/**
+ * Resolves with the quote the mint reports as settled, re-subscribing for as
+ * long as it takes. Interrupting cancels whatever subscription is open.
+ */
+export const awaitMintQuoteSettled = (
+  wallet: LoadedWallet,
+  quote: { readonly quoteId: QuoteId; readonly mint: MintUrl },
+): Effect.Effect<MintQuoteBolt11Response, MintUnreachable | MintRejected> =>
+  subscribeOnce(wallet, quote).pipe(Effect.retry(RESUBSCRIBE_SCHEDULE));

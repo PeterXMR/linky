@@ -517,11 +517,14 @@ describe("Topup", () => {
         ...wallet,
         getMintInfo: () => new CashuMintInfo(websocketMintInfo()),
         on: {
-          mintQuotePaid: (id, onPaid) => {
-            expect(id).toBe(quoteId);
+          mintQuoteUpdates: (ids, onUpdate) => {
+            expect(ids).toEqual([quoteId]);
             queueMicrotask(() => {
+              // What the mint replays on subscribe: still unpaid, and the
+              // topup must keep waiting rather than try to mint on it.
+              onUpdate(quoteResponse("UNPAID"));
               pushed = true;
-              onPaid(quoteResponse("PAID"));
+              onUpdate(quoteResponse("PAID"));
             });
             return Promise.resolve(() => {
               cancelled += 1;
@@ -556,7 +559,7 @@ describe("Topup", () => {
         ...wallet,
         getMintInfo: () => new CashuMintInfo(websocketMintInfo()),
         on: {
-          mintQuotePaid: () => Promise.reject(new Error("socket refused")),
+          mintQuoteUpdates: () => Promise.reject(new Error("socket refused")),
         },
       }),
       storage,
@@ -579,6 +582,59 @@ describe("Topup", () => {
     expect(paid.via).toBe("poll");
   });
 
+  it("re-subscribes after the socket drops and settles on the replayed state", async () => {
+    const storage = freshStorage();
+    let subscriptions = 0;
+    let pushed = false;
+    const { wallet } = makeWallet({
+      states: [],
+      check: () => Promise.resolve(quoteResponse(pushed ? "PAID" : "UNPAID")),
+    });
+    const { run, events } = makeHarness(
+      fakeWallet({
+        ...wallet,
+        getMintInfo: () => new CashuMintInfo(websocketMintInfo()),
+        on: {
+          mintQuoteUpdates: (_ids, onUpdate, onError) => {
+            subscriptions += 1;
+            const attempt = subscriptions;
+            queueMicrotask(() => {
+              if (attempt === 1) {
+                // The OS tore the socket down while the app was backgrounded.
+                onError(new Error("WebSocket closed (code 1006)"));
+                return;
+              }
+              // The mint replays the state on subscribe, so the settlement
+              // missed while disconnected arrives with the new subscription.
+              pushed = true;
+              onUpdate(quoteResponse("PAID"));
+            });
+            return Promise.resolve(() => undefined);
+          },
+        },
+      }),
+      storage,
+    );
+
+    const exit = await run(
+      Effect.gen(function* () {
+        yield* TestClock.adjust("1000 seconds");
+        // Short enough that the poll never reaches its own next tick before
+        // the backoff lets the second subscription through.
+        return yield* runOnTestClock(startAndAwait, "1 second");
+      }).pipe(Effect.provide(TestContext.TestContext)),
+    );
+
+    assert(Exit.isSuccess(exit));
+    expect(exit.value.receipt.amount).toBe(16);
+    expect(subscriptions).toBeGreaterThanOrEqual(2);
+    const paid = events.find(
+      (event) => event._tag === "QuoteStateChanged" && event.state === "PAID",
+    );
+    assert(paid?._tag === "QuoteStateChanged");
+    expect(paid.via).toBe("subscription");
+  });
+
   it("ignores a websocket that cannot push this method or unit", async () => {
     const storage = freshStorage();
     const { wallet } = makeWallet({ states: [quoteResponse("PAID")] });
@@ -589,7 +645,8 @@ describe("Topup", () => {
         getMintInfo: () =>
           new CashuMintInfo(websocketMintInfo(["proof_state"])),
         on: {
-          mintQuotePaid: () => Promise.reject(new Error("must not subscribe")),
+          mintQuoteUpdates: () =>
+            Promise.reject(new Error("must not subscribe")),
         },
       }),
       storage,

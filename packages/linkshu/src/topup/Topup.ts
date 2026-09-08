@@ -41,7 +41,7 @@ import type {
   TopupLockingOptions,
 } from "./domain";
 import {
-  awaitMintQuotePaid,
+  awaitMintQuoteSettled,
   supportsMintQuoteSubscription,
 } from "../internal/quoteSubscription";
 import { PendingTopup, pendingTopups } from "./internal/pendingTopup";
@@ -160,7 +160,7 @@ export class Topup extends Effect.Service<Topup>()("linkshu/Topup", {
       if (!supportsMintQuoteSubscription(wallet, pending.unit)) {
         return pollUntilSettled(wallet, pending);
       }
-      const subscribed = awaitMintQuotePaid(wallet, pending).pipe(
+      const subscribed = awaitMintQuoteSettled(wallet, pending).pipe(
         Effect.map((quote) => {
           emitQuoteState(
             inspector,
@@ -170,7 +170,8 @@ export class Topup extends Effect.Service<Topup>()("linkshu/Topup", {
             "subscription",
           );
         }),
-        // A socket that fails must not end the topup; the poll decides.
+        // The subscription retries its socket forever; if it ever gives up,
+        // it falls silent and the poll decides.
         Effect.orElse(() => Effect.never),
       );
       return Effect.race(pollUntilSettled(wallet, pending), subscribed);

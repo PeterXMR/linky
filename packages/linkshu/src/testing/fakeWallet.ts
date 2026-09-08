@@ -25,7 +25,7 @@ export const fakeWallet = (
   receive: notUnderTest,
   send: notUnderTest,
   checkProofsStates: notUnderTest,
-  on: { mintQuotePaid: notUnderTest },
+  on: { mintQuoteUpdates: notUnderTest },
   createMintQuoteBolt11: notUnderTest,
   checkMintQuoteBolt11: notUnderTest,
   mintProofsBolt11: notUnderTest,
