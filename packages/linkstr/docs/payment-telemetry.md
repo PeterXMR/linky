@@ -114,7 +114,7 @@ Enqueue success means the job is persisted; drop the event from your local queue
 | `appHost`                      | host name only                                         |
 | `devicePlatform`, `appRuntime` | from `detectTelemetryEnvironment`                      |
 
-Direct vs outbox: `publishPaymentTelemetry(draft, recipient)` is one attempt and returns a `PaymentTelemetryReceipt` (`rumorId`, `clientId`, `sentAt`, `recipientCopy`). `Outbox.enqueueTelemetry(draft, recipient, ref)` retries with backoff and returns the `OutboxJobId` rather than an `EnqueueReceipt`: each attempt mints a new author and so a new rumor id, while `draft.id` stays the same.
+Direct vs outbox: `publishPaymentTelemetry(draft, recipient)` is one attempt and returns a `PaymentTelemetryReceipt` (`rumorId`, `clientId`, `sentAt`, `recipientCopy`). `Outbox.enqueueTelemetry(draft, recipient, ref)` retries with backoff on the outbox's background lane, so a failing report never delays chat sends, and returns the `OutboxJobId` rather than an `EnqueueReceipt`: each attempt mints a new author and so a new rumor id, while `draft.id` stays the same.
 
 ### Helpers
 

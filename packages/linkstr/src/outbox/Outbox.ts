@@ -54,6 +54,13 @@ const freshJobId = Effect.sync(() => OutboxJobId.make(crypto.randomUUID()));
 const fifo = (jobs: ReadonlyArray<StoredOutboxJob>): Array<StoredOutboxJob> =>
   [...jobs].sort((a, b) => a.enqueuedAt - b.enqueuedAt);
 
+type OutboxLane = "foreground" | "background";
+
+const LANES: ReadonlyArray<OutboxLane> = ["foreground", "background"];
+
+const laneOf = (operation: OutboxOperation): OutboxLane =>
+  operation._tag === "paymentTelemetry" ? "background" : "foreground";
+
 const normalizeOperation = (
   operation: RumorFixedOperation,
   clientId: ClientId,
@@ -125,8 +132,10 @@ const isOnlineEventTarget = (value: unknown): value is OnlineEventTarget =>
  * Durable send queue over the Chat, Reactions and PaymentTelemetry verticals.
  * `enqueue` persists
  * a normalized job and precomputes its rumor, so the returned `rumorId` is
- * what every delivery retry publishes; a background worker delivers jobs
- * strictly FIFO with invisible backoff retries on delivery errors. Terminal
+ * what every delivery retry publishes; one worker per lane delivers jobs
+ * strictly FIFO with invisible backoff retries on delivery errors, and
+ * payment telemetry has its own lane so a failing report never holds back
+ * chat and reaction sends. Terminal
  * outcomes surface on `results` — a single-consumer stream — and a terminal
  * job is only deleted by `ack`, so unacked terminals re-emit when the service
  * is rebuilt (at-least-once handshake). Jobs stored under a different identity
@@ -146,15 +155,21 @@ export class Outbox extends Effect.Service<Outbox>()("linkstr/Outbox", {
       Queue.unbounded<OutboxResult>(),
       Queue.shutdown,
     );
-    const wake = yield* Effect.acquireRelease(
-      Queue.sliding<void>(1),
-      Queue.shutdown,
-    );
+    const wakes: Record<OutboxLane, Queue.Queue<void>> = {
+      foreground: yield* Effect.acquireRelease(
+        Queue.sliding<void>(1),
+        Queue.shutdown,
+      ),
+      background: yield* Effect.acquireRelease(
+        Queue.sliding<void>(1),
+        Queue.shutdown,
+      ),
+    };
 
     const target: unknown = globalThis;
     if (isOnlineEventTarget(target)) {
       const flush = (): void => {
-        Queue.unsafeOffer(wake, undefined);
+        for (const lane of LANES) Queue.unsafeOffer(wakes[lane], undefined);
       };
       yield* Effect.acquireRelease(
         Effect.sync(() => target.addEventListener("online", flush)),
@@ -221,7 +236,10 @@ export class Outbox extends Effect.Service<Outbox>()("linkstr/Outbox", {
         );
       });
 
-    const runToTerminal = (job: StoredOutboxJob): Effect.Effect<void> =>
+    const runToTerminal = (
+      job: StoredOutboxJob,
+      wake: Queue.Queue<void>,
+    ): Effect.Effect<void> =>
       Effect.gen(function* () {
         let backoff = INITIAL_BACKOFF;
         while (true) {
@@ -273,19 +291,28 @@ export class Outbox extends Effect.Service<Outbox>()("linkstr/Outbox", {
       }
     });
 
-    const nextQueued = Effect.map(store.loadAll, (jobs) =>
-      fifo(jobs).find((job) => job.state._tag === "queued"),
-    );
+    const nextQueued = (lane: OutboxLane) =>
+      Effect.map(store.loadAll, (jobs) =>
+        fifo(jobs).find(
+          (job) =>
+            job.state._tag === "queued" && laneOf(job.operation) === lane,
+        ),
+      );
+
+    const deliverLane = (lane: OutboxLane): Effect.Effect<never> =>
+      Effect.gen(function* () {
+        while (true) {
+          const job = yield* nextQueued(lane);
+          if (job === undefined) yield* Queue.take(wakes[lane]);
+          else yield* runToTerminal(job, wakes[lane]);
+        }
+      });
 
     yield* Effect.forkScoped(
-      Effect.gen(function* () {
-        yield* emitStartup;
-        while (true) {
-          const job = yield* nextQueued;
-          if (job === undefined) yield* Queue.take(wake);
-          else yield* runToTerminal(job);
-        }
-      }),
+      Effect.andThen(
+        emitStartup,
+        Effect.all(LANES.map(deliverLane), { concurrency: "unbounded" }),
+      ),
     );
 
     const insertJob = (
@@ -302,7 +329,7 @@ export class Outbox extends Effect.Service<Outbox>()("linkstr/Outbox", {
           state: { _tag: "queued" },
         });
         yield* store.insert(job);
-        yield* Queue.offer(wake, undefined);
+        yield* Queue.offer(wakes[laneOf(operation)], undefined);
         return job;
       });
 

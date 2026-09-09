@@ -26,7 +26,7 @@ import {
   stubWrapTransport,
 } from "../testing";
 import { OutboxRef } from "./domain";
-import type { RumorFixedOperation } from "./domain";
+import type { OutboxResult, RumorFixedOperation } from "./domain";
 import { Outbox } from "./Outbox";
 import { OutboxStore } from "./OutboxStore";
 import type { OutboxStoreService } from "./OutboxStore";
@@ -312,6 +312,56 @@ describe("Outbox", () => {
     assert(reaction?._tag === "OutboxJobSucceeded");
     assert(reaction.receipt instanceof ReactionReceipt);
     expect(reaction.receipt.rumorId).toBe(receipts[1]?.rumorId);
+  });
+
+  it("keeps delivering chat sends while a telemetry job keeps failing", async () => {
+    const published: Array<SignedWrapEvent> = [];
+    const collector = makeIdentity();
+    const collectorAccepts = { accept: false };
+    const store = makeStore();
+    const transport = stubWrapTransport(published, (wrap) =>
+      recipientOf(wrap) === collector.pubkey ? collectorAccepts.accept : true,
+    );
+
+    const results = await runOutbox(
+      outboxLayer(alice, store, transport),
+      Effect.gen(function* () {
+        const outbox = yield* Outbox;
+        const collected: Array<OutboxResult> = [];
+        yield* Effect.forkScoped(
+          Stream.runForEach(outbox.results, (result) =>
+            Effect.sync(() => {
+              collected.push(result);
+            }),
+          ),
+        );
+        yield* outbox.enqueueTelemetry(
+          telemetryDraft("telemetry-1"),
+          collector.pubkey,
+          OutboxRef.make("telemetry:1"),
+        );
+        yield* eventually(() => published.length >= 1);
+        yield* outbox.enqueue(textOp("hello"), OutboxRef.make("row-1"));
+        yield* eventually(() => collected.some((r) => r.ref === "row-1"));
+        expect(collected.map((r) => r.ref)).toEqual(["row-1"]);
+
+        collectorAccepts.accept = true;
+        yield* outbox.enqueueTelemetry(
+          telemetryDraft("telemetry-2"),
+          collector.pubkey,
+          OutboxRef.make("telemetry:2"),
+        );
+        yield* eventually(() => collected.length === 3);
+        return collected;
+      }).pipe(Effect.scoped),
+    );
+
+    expect(results.map((result) => result.ref)).toEqual([
+      "row-1",
+      "telemetry:1",
+      "telemetry:2",
+    ]);
+    expect(results.every((r) => r._tag === "OutboxJobSucceeded")).toBe(true);
   });
 
   it("delivers payment telemetry and forgets the job once acked", async () => {

@@ -112,9 +112,9 @@ A direct send fails at once with the error its guide lists (for example [chat.md
 
 ## Retry and ordering rules
 
-- Delivery is **strictly FIFO**: one job at a time, in enqueue order. A job that keeps failing blocks the ones behind it.
+- Delivery runs in two lanes, each **strictly FIFO**: one job at a time, in enqueue order. Chat and reaction jobs share the foreground lane; `paymentTelemetry` jobs have a background lane of their own, so a report the collector's relays keep refusing never holds back a chat send. Within a lane a job that keeps failing blocks the ones behind it.
 - Delivery errors (`RecipientNotReached`, `NoRelayReachable`, `WrapNotDelivered`) are retried automatically: sleep 1s, doubling to a 60s cap, forever. You never retry a queued job yourself.
-- A new enqueue and the browser `online` event both cut the current sleep short.
+- A new enqueue cuts the current sleep of its own lane short; the browser `online` event wakes both lanes.
 - Only two things end a job without success: an unexpected defect (`OutboxJobFailed` with `reason: "unexpected-error"`) and a job enqueued under another pubkey found at startup (`reason: "identity-changed"`). Jobs are never sent under a different key than they were enqueued with.
 - A completed job stays stored as `awaiting-ack` until you `ack(jobId)`. Rebuilding the service re-emits every unacked result (at-least-once), so result handlers must be idempotent.
 
