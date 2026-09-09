@@ -96,7 +96,7 @@ The inbox tracks the newest authenticated wrap `created_at` (clamped to now) and
 - `open({ since })` only seeds a session whose store is empty. Once a cursor is saved, `since` is ignored.
 - Without a cursor and without `since`, the first subscription has no `since` at all and relays return whatever they keep.
 
-Supply the store through `linkstrServices({ inboxCursorStore })` or `LinkstrConfig.inboxCursorStore`; `runLinkstr` and the default are in-memory.
+Supply the store through `runLinkstr({ inboxCursorStore })`, `linkstrServices({ inboxCursorStore })`, or `LinkstrConfig.inboxCursorStore`; the default is in-memory, so a headless run without one replays the full `since` window every time.
 
 ```ts
 import { InboxCursorStore, type Pubkey } from "@linky/linkstr";

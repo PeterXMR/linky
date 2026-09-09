@@ -2,6 +2,7 @@ import { Effect } from "effect";
 import type { Layer } from "effect";
 import { linkstrServices } from "./composition";
 import type { LinkstrServices } from "./composition";
+import type { InboxCursorStore } from "./inbox/InboxCursorStore";
 import type { OutboxStore } from "./outbox/OutboxStore";
 import type { NostrSecretKey, RelayUrl } from "./domain/primitives";
 import { NostrTransportSimplePool } from "./services/NostrTransport";
@@ -9,6 +10,7 @@ import type { NostrTransport } from "./services/NostrTransport";
 
 export interface LinkstrHeadlessConfig {
   readonly outboxStore?: Layer.Layer<OutboxStore> | undefined;
+  readonly inboxCursorStore?: Layer.Layer<InboxCursorStore> | undefined;
   readonly secretKey: NostrSecretKey;
   readonly readRelays: ReadonlyArray<RelayUrl>;
   /** Read-only consumers (the service worker) omit this. */
@@ -32,6 +34,7 @@ export const runLinkstr = <A, E>(
       linkstrServices({
         secretKey: config.secretKey,
         outboxStore: config.outboxStore,
+        inboxCursorStore: config.inboxCursorStore,
         readRelays: config.readRelays,
         writeRelays: config.writeRelays ?? [],
         transport: config.transport ?? NostrTransportSimplePool,

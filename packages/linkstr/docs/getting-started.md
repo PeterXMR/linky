@@ -159,7 +159,7 @@ Delete `firstRun.ts` when you are done; it is not part of the package.
 
 Both take `secretKey`, `readRelays`, and `writeRelays` (arrays of `RelayUrl`).
 
-- **`runLinkstr(config, effect)`**: one-shot, as above. Builds the services, runs the effect, tears down the pool. Use it in the service worker, scripts, and tests. `writeRelays` defaults to `[]` for read-only consumers; optional `outboxStore` and `transport` (test seam). The inbox cursor is in memory.
+- **`runLinkstr(config, effect)`**: one-shot, as above. Builds the services, runs the effect, tears down the pool. Use it in the service worker, scripts, and tests. `writeRelays` defaults to `[]` for read-only consumers; optional `outboxStore`, `inboxCursorStore`, and `transport` (test seam). Both stores default to memory, so a runner that opens the inbox and wants to resume from its last checkpoint passes an `InboxCursorStore` ([inbox.md](./inbox.md#the-cursor-and-inboxcursorstore)).
 - **`linkstrServices(config)`**: the same composition as a `Layer`, for a runtime that outlives one call. `writeRelays` and `transport` (normally `NostrTransportSimplePool`) are required; `outboxStore` and `inboxCursorStore` are optional and default to memory. In React do not use it by hand: `@linky/linkstr-react` builds this layer from `linkstrConfigAtom` and rebuilds it on identity change ([react.md](./react.md)).
 
 ## Next
