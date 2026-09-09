@@ -16,6 +16,24 @@ používá také v Google Play a musí se vejít do 500 znaků na jazyk.
 
 ### cs-CZ
 
+## [26.9.8] - 2026-09-09
+
+### en-US
+
+- Pending wallet funds are shown separately and preserved when spending.
+- Top-ups update from mint notifications and reconnect after interruptions.
+- Improved wallet restore and sync recovery while preserving local history.
+- Stalled startup can now be recovered without replacing the running app.
+- Fixed message edits and completed German translations.
+
+### cs-CZ
+
+- Čekající prostředky jsou zobrazené zvlášť a při placení zůstávají zachované.
+- Dobití se aktualizuje podle oznámení mintu a po výpadku obnoví spojení.
+- Vylepšena obnova peněženky a synchronizace se zachováním místní historie.
+- Zaseknuté spouštění lze nyní obnovit bez nahrazení běžící aplikace.
+- Opraveny úpravy zpráv a doplněny německé překlady.
+
 ## [26.9.7] - 2026-09-04
 
 ### en-US
