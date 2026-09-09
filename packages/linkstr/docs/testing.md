@@ -3,7 +3,7 @@
 Two helper sets give you throwaway identities, transport stubs, an in-memory relay, and a polling helper, so a vertical test runs in milliseconds with no network:
 
 - `@linky/linkstr/testing`, a public subpath of the linkstr package, for tests in any workspace.
-- `packages/linkstr-react/src/testing`, package-internal; import it relatively (`from "./testing"`) from tests inside linkstr-react. There is no `@linky/linkstr-react/testing` subpath.
+- `@linky/linkstr-react/testing`, the same for linkstr-react: `configWith`, `settle`, `fakeTransport`, and a re-export of `makeIdentity`.
 
 Never import either from production code.
 
@@ -198,7 +198,7 @@ it("routes a wrap into a typed fact", async () => {
 
 `fake.emit` before `fake.eose()` yields `delivery: "backfill"`; after it, `"live"`. `fake.closeFromRelay("reason")` ends the subscription so you can watch the resubscribe loop; set `fake.down = true` to make `ensureRelay` reject.
 
-## linkstr-react helpers
+## `@linky/linkstr-react/testing`
 
 | Helper                                                              | Use                                                                      |
 | ------------------------------------------------------------------- | ------------------------------------------------------------------------ |
@@ -215,8 +215,12 @@ Drive atoms with a bare `Registry` instead of rendering:
 import { ClientId, RetractionDraft, RumorId } from "@linky/linkstr";
 import { stubWrapTransport } from "@linky/linkstr/testing";
 import type { SignedWrapEvent } from "@linky/linkstr/testing";
-import { linkstrConfigAtom, Registry, retractReactionAtom } from "./index";
-import { configWith, makeIdentity, settle } from "./testing";
+import {
+  linkstrConfigAtom,
+  Registry,
+  retractReactionAtom,
+} from "@linky/linkstr-react";
+import { configWith, makeIdentity, settle } from "@linky/linkstr-react/testing";
 import { Exit } from "effect";
 
 it("retracts through the configured transport", async () => {
@@ -249,7 +253,7 @@ For stream atoms (`wrapInboxAtom`, `outboxResultsAtom`, `relayHealthAtom`), set 
 
 ## Rules
 
-- Never import `@linky/linkstr/testing` or `linkstr-react/src/testing` from production code. Both packages exclude their `testing` directory from the app build.
+- Never import `@linky/linkstr/testing` or `@linky/linkstr-react/testing` from production code. Both packages exclude their `testing` directory from the app build.
 - Extend these helpers instead of redeclaring fixtures per test file.
 - Build inbound fixtures through the public send API where you can, as above; tests that need an independent implementation may use `nostr-tools` directly (it is a devDependency for that reason).
 
