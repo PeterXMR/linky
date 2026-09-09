@@ -217,7 +217,7 @@ The web app's version is `applyOutboxResult` in `apps/web-app/src/app/hooks/mess
 
 ## Testing
 
-`packages/linkstr-react/src/testing` exports `configWith`, `settle`, `fakeTransport`, `fakeTransportLayer`, `relayA`, `relayB`, and re-exports `makeIdentity` (relative import; there is no `@linky/linkstr-react/testing` subpath). Tests use a bare `Registry.make()` instead of rendering; see [testing.md](./testing.md#linkstr-react-helpers).
+`@linky/linkstr-react/testing` exports `configWith`, `settle`, `fakeTransport`, `fakeTransportLayer`, `relayA`, `relayB`, and re-exports `makeIdentity`. Tests use a bare `Registry.make()` instead of rendering; see [testing.md](./testing.md#linkylinkstr-reacttesting).
 
 ## Related
 

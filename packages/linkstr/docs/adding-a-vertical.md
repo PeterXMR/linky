@@ -92,7 +92,7 @@ export const retractReactionAtom = linkstrRuntimeAtom.fn<RetractionDraft>()(
 | `linkstr-react/src/<vertical>.test.ts`         | `reactions.test.ts`                            | the fn atom delivers through the configured transport and fails with `LinkstrNotConfigured` |
 | Outbox tests, if queued                        | `outbox/Outbox.test.ts`, `OutboxStore.test.ts` | stored job decodes; the result carries your receipt                                         |
 
-Use `@linky/linkstr/testing` and `linkstr-react/src/testing` ([testing.md](./testing.md)).
+Use `@linky/linkstr/testing` and `@linky/linkstr-react/testing` ([testing.md](./testing.md)).
 
 ## Inspector events to emit
 

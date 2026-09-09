@@ -14,11 +14,12 @@
 
 ## Import paths
 
-| Path                     | What you get                                                                                       |
-| ------------------------ | -------------------------------------------------------------------------------------------------- |
-| `@linky/linkstr`         | services, drafts, receipts, facts, key codecs, `runLinkstr`, `linkstrServices`                     |
-| `@linky/linkstr/testing` | `makeIdentity`, publish stubs, `FakeRelay`, `stubStorage`; tests only ([testing.md](./testing.md)) |
-| `@linky/linkstr-react`   | effect-atom bindings for the web app ([react.md](./react.md))                                      |
+| Path                           | What you get                                                                                               |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| `@linky/linkstr`               | services, drafts, receipts, facts, key codecs, `runLinkstr`, `linkstrServices`                             |
+| `@linky/linkstr/testing`       | `makeIdentity`, publish stubs, `FakeRelay`, `stubStorage`; tests only ([testing.md](./testing.md))         |
+| `@linky/linkstr-react`         | effect-atom bindings for the web app ([react.md](./react.md))                                              |
+| `@linky/linkstr-react/testing` | `configWith`, `settle`, `fakeTransport`; tests only ([testing.md](./testing.md#linkylinkstr-reacttesting)) |
 
 Never import `nostr-tools` in consumer code; the codecs in [identity-and-keys.md](./identity-and-keys.md) cover keys and ids.
 
