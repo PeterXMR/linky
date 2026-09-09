@@ -2,6 +2,7 @@ import { Effect } from "effect";
 import type { EventId, WrapId } from "../domain/primitives";
 import type { InspectorService } from "../inspector/Inspector";
 import { OperationFailed, PlainOperationSucceeded } from "../inspector/events";
+import { redactAttachmentKeys } from "./redactAttachmentKeys";
 
 export interface InspectedPlainResult<A> {
   readonly result: A;
@@ -11,17 +12,23 @@ export interface InspectedPlainResult<A> {
 
 /** Plain-event sibling of the reactions inspector tap. */
 export const inspectPlainOperation =
-  (inspector: InspectorService, name: string, params: unknown) =>
+  (inspector: InspectorService, name: string, rawParams: unknown) =>
   <A, E>(
     operation: Effect.Effect<InspectedPlainResult<A>, E>,
-  ): Effect.Effect<A, E> =>
-    operation.pipe(
+  ): Effect.Effect<A, E> => {
+    const params = redactAttachmentKeys(rawParams);
+    return operation.pipe(
       Effect.tap(({ eventIds, result }) =>
         Effect.sync(() =>
           inspector.emit(
             () =>
               new PlainOperationSucceeded(
-                { name, params, eventIds, result },
+                {
+                  name,
+                  params,
+                  eventIds,
+                  result: redactAttachmentKeys(result),
+                },
                 { disableValidation: true },
               ),
           ),
@@ -40,3 +47,4 @@ export const inspectPlainOperation =
         ),
       ),
     );
+  };

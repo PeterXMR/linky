@@ -21,6 +21,7 @@ import { EventId, RumorId } from "../domain/primitives";
 import type { ClientId, Pubkey, UnixSeconds } from "../domain/primitives";
 import { Inspector } from "../inspector/Inspector";
 import { OperationFailed, PlainOperationSucceeded } from "../inspector/events";
+import { redactAttachmentKeys } from "../internal/redactAttachmentKeys";
 import type { Rumor } from "../internal/nostrEvent";
 import { freshClientId } from "../internal/operations";
 import { nowSeconds } from "../internal/time";
@@ -333,7 +334,7 @@ export class Outbox extends Effect.Service<Outbox>()("linkstr/Outbox", {
             new PlainOperationSucceeded(
               {
                 name: "outbox.enqueue",
-                params: { ref, operation: normalized },
+                params: redactAttachmentKeys({ ref, operation: normalized }),
                 eventIds: [EventId.make(rumor.id)],
                 result: receipt,
               },

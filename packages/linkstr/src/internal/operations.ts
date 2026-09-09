@@ -4,6 +4,7 @@ import { ClientId } from "../domain/primitives";
 import type { RumorId, UnixSeconds } from "../domain/primitives";
 import type { InspectorService } from "../inspector/Inspector";
 import { OperationFailed, OperationSucceeded } from "../inspector/events";
+import { redactAttachmentKeys } from "./redactAttachmentKeys";
 
 export const freshClientId = Effect.sync(() =>
   ClientId.make(crypto.randomUUID()),
@@ -21,11 +22,12 @@ export const inspectOperation =
   <A>(
     inspector: InspectorService,
     name: string,
-    params: unknown,
+    rawParams: unknown,
     summarize: (receipt: A) => OperationReceiptSummary,
   ) =>
-  <T extends A, E>(operation: Effect.Effect<T, E>): Effect.Effect<T, E> =>
-    operation.pipe(
+  <T extends A, E>(operation: Effect.Effect<T, E>): Effect.Effect<T, E> => {
+    const params = redactAttachmentKeys(rawParams);
+    return operation.pipe(
       Effect.tap((receipt) =>
         Effect.sync(() =>
           inspector.emit(
@@ -49,3 +51,4 @@ export const inspectOperation =
         ),
       ),
     );
+  };

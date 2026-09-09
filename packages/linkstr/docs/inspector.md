@@ -114,14 +114,14 @@ Operation and wire rows correlate through shared ids: `OperationSucceeded.selfCo
 
 ## The no-key-material rule
 
-The rule: no identity key material in any inspector event, in any field. Not an nsec, not seed words, not a derived `NostrSecretKey`, not inside `params`, `error`, or `event`. Decrypted message content is acceptable by design; the settings copy discloses it.
+The rule: no key material in any inspector event, in any field. Not an nsec, not seed words, not a derived `NostrSecretKey`, and not an attachment's AES-GCM `key`/`nonce` — not inside `params`, `result`, `error`, or `event`. Decrypted message content is acceptable by design; the settings copy discloses it.
 
 What is emitted today, so you know what a captured timeline contains:
 
-- `params` is the draft or argument object exactly as the caller passed it. For `chat.sendImage`, and for `outbox.enqueue` / `outbox.job` rows of a queued `chat.image`, that includes `image.key` and `image.nonce`, the attachment's AES-GCM key. `InboxRouted.event` likewise carries a received `ImageBody` with its key. A captured timeline can therefore decrypt attachments, not only read text.
+- `params` is the draft or argument object as the caller passed it, with attachment keys stripped: for `chat.sendImage`, `outbox.enqueue` rows of a queued `chat.image`, and `InboxRouted.event` / `inbox.fetchWrapEvent` results carrying an `ImageBody`, the `PrivateImage` appears without `key` and `nonce` (url, hashes, size, and dimensions stay). A captured timeline can read text but cannot decrypt attachments.
 - Identity key material is not emitted anywhere. Telemetry passes `{ draft, recipient }` and keeps the per-attempt signing key out of the event; `WirePublished.wrap` and `WireEventReceived.event` are ciphertext.
 
-Keep it that way when you add an emission point: pass drafts, receipts, ids, and errors, never the identity service or a config object.
+The stripping is `redactAttachmentKeys` (`src/internal/redactAttachmentKeys.ts`), applied inside `inspectOperation`, `inspectPlainOperation`, the outbox enqueue row, and the inbox routing row; it walks the value and drops `key`/`nonce` from any object that also has `encryptionAlgorithm`. `src/inspector/inspectorEmission.test.ts` sends, enqueues, receives, and fetches an image and asserts no emitted row contains the key bytes. Keep it that way when you add an emission point: pass drafts, receipts, ids, and errors through those helpers (or through `redactAttachmentKeys` when emitting by hand), never the identity service or a config object.
 
 ## Adding an emission point
 
