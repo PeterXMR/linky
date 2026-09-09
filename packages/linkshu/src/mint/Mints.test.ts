@@ -6,6 +6,7 @@ import {
   MintInfo as CashuMintInfo,
 } from "@cashu/cashu-ts";
 import { Effect, Exit, Layer } from "effect";
+import { MintInUse } from "../domain/errors";
 import {
   MintUrl,
   TokenRowId,
@@ -62,6 +63,55 @@ const stubKv = (entries: Record<string, string>): Layer.Layer<KeyValueStore> =>
       ),
     tryAcquireLease: () => Effect.die("not under test"),
     releaseLease: () => Effect.die("not under test"),
+  });
+
+const recordingKv = (entries: Record<string, string>) => {
+  const store = new Map(Object.entries(entries));
+  const removed: Array<string> = [];
+  const layer = Layer.succeed(KeyValueStore, {
+    get: (key) => Effect.succeed(store.get(key) ?? null),
+    set: (key, value) =>
+      Effect.sync(() => {
+        store.set(key, value);
+      }),
+    remove: (key) =>
+      Effect.sync(() => {
+        store.delete(key);
+        removed.push(key);
+      }),
+    listKeys: (prefix) =>
+      Effect.succeed([...store.keys()].filter((key) => key.startsWith(prefix))),
+    tryAcquireLease: () => Effect.die("not under test"),
+    releaseLease: () => Effect.die("not under test"),
+  });
+  return { layer, store, removed };
+};
+
+const encodedTokenAt = (mint: string): string =>
+  getEncodedToken({
+    mint,
+    proofs: [
+      {
+        id: "009a1f293253e41e",
+        amount: Amount.from(1),
+        secret: "test-secret",
+        C: "02" + "cd".repeat(32),
+      },
+    ],
+  });
+
+const rowAt = (
+  id: string,
+  mint: string,
+  state: StoredTokenRow["state"],
+): StoredTokenRow =>
+  new StoredTokenRow({
+    id: TokenRowId.make(id),
+    originalTokenText: TokenText.make(encodedTokenAt(mint)),
+    tokenText: TokenText.make(encodedTokenAt(mint)),
+    state,
+    error: null,
+    createdAt: UnixSeconds.make(1_700_000_000),
   });
 
 const runMints = <A, E>(
@@ -255,5 +305,108 @@ describe("Mints.knownMints", () => {
     expect(exit).toEqual(
       Exit.succeed(["https://mint.example", "https://seen.example"]),
     );
+  });
+});
+
+describe("Mints.addKnownMint", () => {
+  it("records the mint as seen without loading its wallet", async () => {
+    const kv = recordingKv({});
+    const inspector = recordingInspector();
+    const instances = Layer.succeed(
+      WalletInstances,
+      WalletInstances.make({ get: () => Effect.die("must not load") }),
+    );
+
+    const exit = await runMints(
+      Layer.mergeAll(instances, stubTokenStore([]), kv.layer, inspector.layer),
+      Effect.gen(function* () {
+        const mints = yield* Mints;
+        yield* mints.addKnownMint(mint);
+        return yield* mints.knownMints;
+      }),
+    );
+
+    expect(exit).toEqual(Exit.succeed([mint]));
+    expect(kv.store.get(seenMintKey(mint))).toBe(mint);
+    expect(inspector.events).toEqual([
+      expect.objectContaining({
+        _tag: "OperationSucceeded",
+        name: "mints.addKnownMint",
+        params: { mint },
+      }),
+    ]);
+  });
+});
+
+describe("Mints.removeKnownMint", () => {
+  const instances = Layer.succeed(
+    WalletInstances,
+    WalletInstances.make({ get: () => Effect.die("must not load") }),
+  );
+
+  it("forgets a seen mint no stored row names", async () => {
+    const kv = recordingKv({ [seenMintKey(mint)]: mint });
+    const inspector = recordingInspector();
+
+    const exit = await runMints(
+      Layer.mergeAll(
+        instances,
+        stubTokenStore([rowAt("row-1", "https://other.example", "error")]),
+        kv.layer,
+        inspector.layer,
+      ),
+      Effect.gen(function* () {
+        const mints = yield* Mints;
+        yield* mints.removeKnownMint(mint);
+        return yield* mints.knownMints;
+      }),
+    );
+
+    expect(exit).toEqual(Exit.succeed(["https://other.example"]));
+    expect(kv.removed).toEqual([seenMintKey(mint)]);
+    expect(inspector.events).toEqual([
+      expect.objectContaining({
+        _tag: "OperationSucceeded",
+        name: "mints.removeKnownMint",
+        params: { mint },
+      }),
+    ]);
+  });
+
+  it.each([
+    "pending",
+    "accepted",
+    "reserved",
+    "issued",
+    "externalized",
+    "error",
+  ] as const)("refuses while a %s row still names the mint", async (state) => {
+    const kv = recordingKv({ [seenMintKey(mint)]: mint });
+    const inspector = recordingInspector();
+    const other = MintUrl.make("https://other.example");
+
+    const exit = await runMints(
+      Layer.mergeAll(
+        instances,
+        stubTokenStore([
+          rowAt("row-1", mint, state),
+          rowAt("row-2", other, "accepted"),
+        ]),
+        kv.layer,
+        inspector.layer,
+      ),
+      Effect.flatMap(Mints, (mints) => mints.removeKnownMint(mint)),
+    );
+
+    expect(exit).toEqual(Exit.fail(new MintInUse({ mint, rowCount: 1 })));
+    expect(kv.removed).toEqual([]);
+    expect(inspector.events).toEqual([
+      expect.objectContaining({
+        _tag: "OperationFailed",
+        name: "mints.removeKnownMint",
+        params: { mint },
+        error: new MintInUse({ mint, rowCount: 1 }),
+      }),
+    ]);
   });
 });

@@ -7,7 +7,7 @@ import type { TokenStoreService } from "../../ports/TokenStore";
 import { SEEN_MINTS_KEY_PREFIX } from "./WalletInstances";
 
 /** Undecodable stored rows carry no usable mint; they are skipped, not fatal. */
-const tokenTextMint = (tokenText: string): MintUrl | null => {
+export const tokenTextMint = (tokenText: string): MintUrl | null => {
   try {
     return parseMintUrl(getTokenMetadata(tokenText).mint);
   } catch {

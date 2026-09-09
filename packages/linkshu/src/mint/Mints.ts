@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { MintInUse } from "../domain/errors";
 import type { MintRejected, MintUnreachable } from "../domain/errors";
 import type { MintUrl } from "../domain/primitives";
 import { Inspector } from "../inspector/Inspector";
@@ -7,9 +8,9 @@ import { KeyValueStore } from "../ports/KeyValueStore";
 import { TokenStore } from "../ports/TokenStore";
 import { findMintInfoIconValue, isTestMintUrl } from "./icons";
 import { MintInfo } from "./domain";
-import { collectKnownMints } from "./internal/knownMints";
+import { collectKnownMints, tokenTextMint } from "./internal/knownMints";
 import { boundKeysetInputFeePpk } from "./internal/keysetFees";
-import { WalletInstances } from "./internal/WalletInstances";
+import { seenMintKey, WalletInstances } from "./internal/WalletInstances";
 import type { LoadedWallet } from "./internal/WalletInstances";
 import { sat } from "../internal/units";
 
@@ -72,6 +73,25 @@ export class Mints extends Effect.Service<Mints>()("linkshu/Mints", {
       tokenStore,
     );
 
-    return { info, knownMints } as const;
+    const addKnownMint = (mint: MintUrl): Effect.Effect<void> =>
+      kv
+        .set(seenMintKey(mint), mint)
+        .pipe(inspectOperation(inspector, "mints.addKnownMint", { mint }));
+
+    const countRowsAt = (mint: MintUrl): Effect.Effect<number> =>
+      Effect.map(
+        tokenStore.loadAll,
+        (rows) =>
+          rows.filter((row) => tokenTextMint(row.tokenText) === mint).length,
+      );
+
+    const removeKnownMint = (mint: MintUrl): Effect.Effect<void, MintInUse> =>
+      Effect.flatMap(countRowsAt(mint), (rowCount) =>
+        rowCount > 0
+          ? Effect.fail(new MintInUse({ mint, rowCount }))
+          : kv.remove(seenMintKey(mint)),
+      ).pipe(inspectOperation(inspector, "mints.removeKnownMint", { mint }));
+
+    return { info, knownMints, addKnownMint, removeKnownMint } as const;
   }),
 }) {}

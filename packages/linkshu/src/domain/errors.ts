@@ -139,6 +139,11 @@ export class CounterLockTimeout extends Schema.TaggedError<CounterLockTimeout>()
   },
 ) {}
 
+export class MintInUse extends Schema.TaggedError<MintInUse>()("MintInUse", {
+  mint: MintUrl,
+  rowCount: Schema.Int.pipe(Schema.positive()),
+}) {}
+
 export class TokenRowNotFound extends Schema.TaggedError<TokenRowNotFound>()(
   "TokenRowNotFound",
   {

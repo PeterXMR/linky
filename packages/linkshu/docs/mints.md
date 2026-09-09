@@ -1,6 +1,6 @@
 # Mints
 
-`Mints` answers "what do I know about this mint" and "which mints does this wallet have state for". Use `info` for the mint settings page (name, fees, multi-part payment support, icon) and `knownMints` when you need every mint the wallet has touched.
+`Mints` answers "what do I know about this mint" and "which mints does this wallet have state for". Use `info` for the mint settings page (name, fees, multi-part payment support, icon), `knownMints` when you need every mint the wallet has touched, and `addKnownMint` / `removeKnownMint` to manage that set by hand.
 
 ## Quick example
 
@@ -29,6 +29,19 @@ const listMints: Effect.Effect<
   never,
   Mints
 > = Effect.flatMap(Mints, (mints) => mints.knownMints);
+
+const forgetMint = (raw: string) =>
+  Effect.gen(function* () {
+    const mint = parseMintUrl(raw);
+    if (mint === null) return "not a mint url";
+    const mints = yield* Mints;
+    return yield* mints.removeKnownMint(mint).pipe(
+      Effect.as("forgotten"),
+      Effect.catchTag("MintInUse", (inUse) =>
+        Effect.succeed(`still holds ${inUse.rowCount} token rows`),
+      ),
+    );
+  });
 ```
 
 Always go through `parseMintUrl` (or `MintUrl.make` on already-normalized input): the package compares mints by their normalized form without a trailing slash, and two spellings of one mint would fork its counters.
@@ -50,7 +63,9 @@ Always go through `parseMintUrl` (or `MintUrl.make` on already-normalized input)
 
 ### The known-mint set
 
-`knownMints` is the union of the mints named by stored rows (any state) and the _seen_ mints. There is no explicit "add" call: a mint is recorded as seen the first time any operation loads its wallet successfully — `Mints.info` included. So to register a mint, call `info` on it. Nothing removes a seen mint; `Restore.wipeSeedBoundState` leaves this set alone. Restore defaults to this set when you pass no `mints`.
+`knownMints` is the union of the mints named by stored rows (any state) and the _seen_ mints. A mint is recorded as seen the first time any operation loads its wallet successfully — `Mints.info` included — or explicitly through `addKnownMint`, which needs no network and is the way to register a mint before it holds funds.
+
+`removeKnownMint` forgets a seen mint so `Restore` and `Validation` stop probing it. Stored rows name their mint themselves, so the call fails with `MintInUse` while any row (whatever its state) still does; delete or spend those rows first (`Tokens.deleteSpent` for `error` rows). `Restore.wipeSeedBoundState` leaves the seen set alone. Restore defaults to `knownMints` when you pass no `mints`.
 
 Successful wallet loads are cached for the runtime's lifetime; a failed load is evicted so the next call retries.
 
@@ -71,14 +86,19 @@ Pure helpers, no runtime needed:
 
 `knownMints`: `Effect<ReadonlyArray<MintUrl>>`, sorted.
 
+`addKnownMint(mint: MintUrl)`: `Effect<void>`; idempotent.
+
+`removeKnownMint(mint: MintUrl)`: `Effect<void, MintInUse>`; a no-op for a mint that was never seen.
+
 ## Errors
 
-| Tag               | Raised by | When                                                | What to do                                    |
-| ----------------- | --------- | --------------------------------------------------- | --------------------------------------------- |
-| `MintUnreachable` | `info`    | network/timeout/5xx during wallet load              | retry later; show cached info if you keep any |
-| `MintRejected`    | `info`    | the mint answered but its info/keysets are unusable | surface `detail`                              |
+| Tag               | Raised by         | When                                                       | What to do                                    |
+| ----------------- | ----------------- | ---------------------------------------------------------- | --------------------------------------------- |
+| `MintUnreachable` | `info`            | network/timeout/5xx during wallet load                     | retry later; show cached info if you keep any |
+| `MintRejected`    | `info`            | the mint answered but its info/keysets are unusable        | surface `detail`                              |
+| `MintInUse`       | `removeKnownMint` | stored rows still name the mint (`rowCount` says how many) | delete or spend those rows, then retry        |
 
-`knownMints` never fails.
+`knownMints` and `addKnownMint` never fail.
 
 ## Related
 

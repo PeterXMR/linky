@@ -61,6 +61,8 @@ export const describeTaggedCashuError = (error: unknown): string | null => {
       return "Token is already in the wallet";
     case "TokenRowNotFound":
       return "Token not found";
+    case "MintInUse":
+      return "Mint still holds tokens";
     case "InvalidTokenTransition":
       return "Token state does not allow this";
     case "LegacyError":
