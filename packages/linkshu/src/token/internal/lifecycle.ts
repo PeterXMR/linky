@@ -30,6 +30,7 @@ export interface InsertRowArgs {
   readonly originalTokenText: TokenText;
   readonly tokenText: TokenText;
   readonly state: TokenState;
+  readonly error?: string | null;
   readonly reason: string;
 }
 
@@ -44,7 +45,7 @@ export const insertRowInState = (
         originalTokenText: args.originalTokenText,
         tokenText: args.tokenText,
         state: args.state,
-        error: null,
+        error: args.error ?? null,
       }),
     )
     .pipe(

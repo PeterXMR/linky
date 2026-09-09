@@ -1,7 +1,11 @@
 import type { Proof as CashuProof } from "@cashu/cashu-ts";
 import { getEncodedToken, MintOperationError } from "@cashu/cashu-ts";
 import { Effect, Either, Exit, Layer, Schema } from "effect";
-import { MintRejected, TokenAlreadySpent } from "../domain/errors";
+import {
+  MintRejected,
+  TokenAlreadyKnown,
+  TokenAlreadySpent,
+} from "../domain/errors";
 import {
   MintUrl,
   TokenRowId,
@@ -19,6 +23,7 @@ import { NewTokenRow, StoredTokenRow, TokenStore } from "../ports/TokenStore";
 import { fakeWallet, KEYSET_HEX, proof } from "../testing/fakeWallet";
 import { recordingInspector } from "../testing/inspector";
 import { amountOf, seedRow as seedTokenRow } from "../testing/rows";
+import { ImportRowDraft } from "./domain";
 import type { TokenState } from "./domain";
 import { Tokens } from "./Tokens";
 
@@ -860,5 +865,119 @@ describe("Tokens.deleteSpent", () => {
     expect(exit.value.result).toMatchObject({ right: [] });
     expect(exit.value.rows).toHaveLength(4);
     expect(checkedSecrets).toEqual([]);
+  });
+});
+
+describe("Tokens.importRow", () => {
+  it("persists the row as the backup states it, without touching the mint", async () => {
+    const harness = makeHarness();
+
+    const exit = await harness.run(
+      withRows([], (tokens) =>
+        tokens.importRow(
+          new ImportRowDraft({
+            originalTokenText: tokenA,
+            tokenText: tokenB,
+            state: "issued",
+            error: null,
+          }),
+        ),
+      ),
+    );
+
+    assert(Exit.isSuccess(exit));
+    const { result, rows } = exit.value;
+    assert(Either.isRight(result));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      id: result.right,
+      originalTokenText: tokenA,
+      tokenText: tokenB,
+      state: "issued",
+      error: null,
+    });
+    expect(harness.receiveCalls()).toBe(0);
+    expect(harness.checkedSecrets).toEqual([]);
+    expect(harness.events).toEqual([
+      expect.objectContaining({
+        _tag: "TokenLifecycleChanged",
+        rowId: result.right,
+        from: null,
+        to: "issued",
+        reason: "import",
+      }),
+      expect.objectContaining({
+        _tag: "OperationSucceeded",
+        name: "tokens.importRow",
+        params: { state: "issued" },
+        result: { rowId: result.right, state: "issued" },
+      }),
+    ]);
+    expect(JSON.stringify(harness.events)).not.toContain("cashu");
+  });
+
+  it("keeps error text only on error rows", async () => {
+    const harness = makeHarness();
+    const spent = encodeSpent(new TokenAlreadySpent({ mint }));
+
+    const exit = await harness.run(
+      withRows([], (tokens) =>
+        Effect.all([
+          tokens.importRow(
+            new ImportRowDraft({
+              originalTokenText: tokenA,
+              tokenText: tokenA,
+              state: "accepted",
+              error: "stale failure",
+            }),
+          ),
+          tokens.importRow(
+            new ImportRowDraft({
+              originalTokenText: tokenB,
+              tokenText: tokenB,
+              state: "error",
+              error: spent,
+            }),
+          ),
+        ]),
+      ),
+    );
+
+    assert(Exit.isSuccess(exit));
+    expect(exit.value.rows.map((row) => [row.state, row.error])).toEqual([
+      ["accepted", null],
+      ["error", spent],
+    ]);
+  });
+
+  it("refuses a token either text of an existing row already names", async () => {
+    const harness = makeHarness();
+
+    const exit = await harness.run(
+      withRows([{ tokenText: tokenA, state: "accepted" }], (tokens) =>
+        tokens.importRow(
+          new ImportRowDraft({
+            originalTokenText: tokenB,
+            tokenText: tokenA,
+            state: "accepted",
+            error: null,
+          }),
+        ),
+      ),
+    );
+
+    assert(Exit.isSuccess(exit));
+    const { rowIds, result, rows } = exit.value;
+    expect(result).toEqual(
+      Either.left(new TokenAlreadyKnown({ rowId: rowIds[0] })),
+    );
+    expect(rows).toHaveLength(1);
+    expect(harness.events).toEqual([
+      expect.objectContaining({
+        _tag: "OperationFailed",
+        name: "tokens.importRow",
+        error: new TokenAlreadyKnown({ rowId: rowIds[0] }),
+      }),
+    ]);
   });
 });

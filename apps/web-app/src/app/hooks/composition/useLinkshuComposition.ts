@@ -33,6 +33,7 @@ import type {
   Bip39Seed,
   DeletedSpentToken,
   FeeProbeError,
+  ImportRowDraft,
   InvalidTokenTransition,
   IssuedClaimReport,
   LightningFeeProbeResult,
@@ -47,6 +48,7 @@ import type {
   RowCheckResult,
   SendError,
   SendReceipt,
+  TokenAlreadyKnown,
   TokenRowNotFound,
   TokenProofStateAmounts,
   TopupAdoptError,
@@ -235,6 +237,10 @@ export interface CashuTokenLifecycle {
    * transition — the handed-over encoding stays valid for its recipient.
    */
   readonly forget: (rowId: string) => Promise<void>;
+  /** Restores a backup row as-is: no receive, swap, or mint check. */
+  readonly importRow: (
+    draft: ImportRowDraft,
+  ) => Promise<Either.Either<TokenRowId, TokenAlreadyKnown>>;
   readonly markExternalized: (
     rowId: string,
   ) => Promise<Either.Either<void, TokenTransitionError>>;
@@ -530,6 +536,8 @@ export const useLinkshuComposition = ({
         run(Effect.flatMap(Tokens, (tokens) => tokens.deleteSpent)),
       forget: (id) =>
         run(Effect.flatMap(TokenStore, (store) => store.remove(rowId(id)))),
+      importRow: (draft) =>
+        runEither(Effect.flatMap(Tokens, (tokens) => tokens.importRow(draft))),
       markExternalized: (id) =>
         runEither(
           Effect.flatMap(Tokens, (tokens) =>

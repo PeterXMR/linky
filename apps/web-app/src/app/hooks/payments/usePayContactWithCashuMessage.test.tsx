@@ -153,6 +153,7 @@ const setup = async (options: SetupOptions = {}) => {
     checkIssuedClaims: vi.fn<CashuTokenLifecycle["checkIssuedClaims"]>(),
     deleteSpent: vi.fn<CashuTokenLifecycle["deleteSpent"]>(),
     forget,
+    importRow: vi.fn<CashuTokenLifecycle["importRow"]>(),
     markExternalized: vi.fn<CashuTokenLifecycle["markExternalized"]>(),
     markIssued: vi.fn<CashuTokenLifecycle["markIssued"]>(),
     reserve: vi.fn<CashuTokenLifecycle["reserve"]>(),

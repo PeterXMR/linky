@@ -1,26 +1,32 @@
 import { writeContact } from "../lib/writeContact";
 import { toContactTextFields } from "../lib/contactFields";
-import { Schema } from "effect";
-import * as Evolu from "@evolu/common";
+import { Either, Option, Schema } from "effect";
+import type * as Evolu from "@evolu/common";
+import { ImportRowDraft } from "@linky/linkshu";
 import React from "react";
 import type { CashuTokenRow } from "../../evolu";
 import { JsonValue } from "../../types/json";
 import { asRecord } from "../../utils/validation";
 import type { ContactRowLike } from "../types/appTypes";
-import { createCashuTokenId } from "../lib/cashuTokenIdentity";
+import {
+  CASHU_TOKEN_STATE_ACCEPTED,
+  normalizeCashuTokenState,
+} from "../lib/cashuTokenState";
+import type { CashuTokenLifecycle } from "./composition/useLinkshuComposition";
 import type { Translate } from "../../i18n";
 
 type EvoluMutations = ReturnType<typeof import("../../evolu").useEvolu>;
 
+const decodeImportRowDraft = Schema.decodeUnknownOption(ImportRowDraft);
+
 interface UseAppDataTransferParams<TContact extends ContactRowLike> {
   appOwnerId: Evolu.OwnerId | null;
-  cashuOwnerId: Evolu.OwnerId | null;
   cashuTokens: readonly CashuTokenRow[];
-  cashuTokensAll: readonly CashuTokenRow[];
   contacts: readonly TContact[];
+  /** Null until the wallet runtime is up; token rows are then skipped. */
+  importCashuTokenRow: CashuTokenLifecycle["importRow"] | null;
   importDataFileInputRef: React.RefObject<HTMLInputElement | null>;
   insert: EvoluMutations["insert"];
-  upsert: EvoluMutations["upsert"];
   pushToast: (message: string) => void;
   t: Translate;
   update: EvoluMutations["update"];
@@ -28,45 +34,15 @@ interface UseAppDataTransferParams<TContact extends ContactRowLike> {
 
 export const useAppDataTransfer = <TContact extends ContactRowLike>({
   appOwnerId,
-  cashuOwnerId,
   cashuTokens,
-  cashuTokensAll,
   contacts,
+  importCashuTokenRow,
   importDataFileInputRef,
   insert,
-  upsert,
   pushToast,
   t,
   update,
 }: UseAppDataTransferParams<TContact>) => {
-  const buildImportedCashuTokenPayload = React.useCallback(
-    (args: {
-      error: string | null;
-      rawToken: string | null;
-      state: string | null;
-      token: string;
-    }) => {
-      const payload: {
-        id: ReturnType<typeof createCashuTokenId>;
-        token: typeof Evolu.NonEmptyString.Type;
-        error?: typeof Evolu.NonEmptyString1000.Type;
-        state?: typeof Evolu.NonEmptyString100.Type;
-      } = {
-        id: createCashuTokenId(args.rawToken || args.token),
-        token: Evolu.NonEmptyString.orThrow(args.token),
-      };
-
-      const state = (args.state ?? "").trim();
-      if (state) payload.state = Evolu.NonEmptyString100.orThrow(state);
-
-      const error = (args.error ?? "").trim();
-      if (error) payload.error = Evolu.NonEmptyString1000.orThrow(error);
-
-      return payload;
-    },
-    [],
-  );
-
   const exportAppData = React.useCallback(() => {
     try {
       const now = new Date();
@@ -129,7 +105,7 @@ export const useAppDataTransfer = <TContact extends ContactRowLike>({
   }, [importDataFileInputRef]);
 
   const importAppDataFromText = React.useCallback(
-    (text: string) => {
+    async (text: string) => {
       const sanitizeText = (value: unknown, maxLen: number): string | null => {
         const raw = String(value ?? "").trim();
         if (!raw) return null;
@@ -167,16 +143,6 @@ export const useAppDataTransfer = <TContact extends ContactRowLike>({
       }
       const insertedNpubs = new Set<string>();
       const insertedLnAddresses = new Set<string>();
-
-      const existingTokenSet = new Set<string>();
-      const existingTokenIdSet = new Set<string>();
-      for (const token of cashuTokensAll) {
-        const encoded = (token.token ?? "").trim();
-        const raw = (token.rawToken ?? "").trim();
-        if (encoded) existingTokenSet.add(encoded);
-        if (raw) existingTokenSet.add(raw);
-        existingTokenIdSet.add(token.id);
-      }
 
       let addedContacts = 0;
       let updatedContacts = 0;
@@ -243,33 +209,23 @@ export const useAppDataTransfer = <TContact extends ContactRowLike>({
       }
 
       for (const item of importedTokens) {
+        if (importCashuTokenRow === null) break;
         const rec = asRecord(item);
         if (!rec) continue;
         const token = String(rec.token ?? "").trim();
         if (!token) continue;
-        if (existingTokenSet.has(token)) continue;
 
-        const rawToken = sanitizeText(rec.rawToken, 100000);
-        const tokenId = createCashuTokenId(rawToken || token);
-        if (existingTokenIdSet.has(tokenId)) continue;
-        const state = sanitizeText(rec.state, 100);
-        const error = sanitizeText(rec.error, 1000);
-
-        const payload = buildImportedCashuTokenPayload({
-          token,
-          rawToken,
-          state,
-          error,
+        const draft = decodeImportRowDraft({
+          originalTokenText: sanitizeText(rec.rawToken, 100000) ?? token,
+          tokenText: token,
+          state:
+            normalizeCashuTokenState(rec.state) ?? CASHU_TOKEN_STATE_ACCEPTED,
+          error: sanitizeText(rec.error, 1000),
         });
-        const result = cashuOwnerId
-          ? upsert("cashuToken", payload, { ownerId: cashuOwnerId })
-          : upsert("cashuToken", payload);
-        if (result.ok) {
-          addedTokens += 1;
-          existingTokenSet.add(token);
-          if (rawToken) existingTokenSet.add(rawToken);
-          existingTokenIdSet.add(tokenId);
-        }
+        if (Option.isNone(draft)) continue;
+
+        const result = await importCashuTokenRow(draft.value);
+        if (Either.isRight(result)) addedTokens += 1;
       }
 
       if (addedContacts === 0 && updatedContacts === 0 && addedTokens === 0) {
@@ -281,18 +237,7 @@ export const useAppDataTransfer = <TContact extends ContactRowLike>({
         `${t("importDone")} (${addedContacts}/${updatedContacts}/${addedTokens})`,
       );
     },
-    [
-      appOwnerId,
-      buildImportedCashuTokenPayload,
-      cashuOwnerId,
-      cashuTokensAll,
-      contacts,
-      insert,
-      pushToast,
-      t,
-      update,
-      upsert,
-    ],
+    [appOwnerId, contacts, importCashuTokenRow, insert, pushToast, t, update],
   );
 
   const handleImportAppDataFilePicked = React.useCallback(
@@ -300,7 +245,7 @@ export const useAppDataTransfer = <TContact extends ContactRowLike>({
       if (!file) return;
       try {
         const text = await file.text();
-        importAppDataFromText(text);
+        await importAppDataFromText(text);
       } catch {
         pushToast(t("importFailed"));
       }

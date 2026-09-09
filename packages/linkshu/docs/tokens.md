@@ -1,6 +1,6 @@
 # Tokens
 
-`Tokens` is the read model over stored rows plus the lifecycle transitions callers are allowed to make. Use `list` and `balances` to render the wallet, the transition calls when a token changes hands, `returnToWallet` to take one back, and `deleteSpent` to clean up. The token codec exports in `token/codec.ts` are the pure functions behind all of it.
+`Tokens` is the read model over stored rows plus the lifecycle transitions callers are allowed to make. Use `list` and `balances` to render the wallet, the transition calls when a token changes hands, `returnToWallet` to take one back, `deleteSpent` to clean up, and `importRow` to restore a row from a backup. The token codec exports in `token/codec.ts` are the pure functions behind all of it.
 
 ## Quick example
 
@@ -64,6 +64,36 @@ Removes rows the mints confirm fully spent and returns `DeletedSpentToken[]` (`r
 
 Rows in other states are never swept: `issued` rows are pruned by `Validation.checkIssued` once claimed; `externalized` rows come back only through `returnToWallet`; `reserved` and `pending` rows belong to an operation in flight (a melt's `reserved` inputs are settled by `Melt.resumePending`).
 
+### `importRow`
+
+`importRow(draft: ImportRowDraft)` restores one row from a backup exactly as the backup states it and returns its `TokenRowId`. The draft is `{ originalTokenText, tokenText, state, error }`; there is no receive, swap, or mint check, so a row comes back in whatever state it left with, and the next NUT-07 check (`Validation.checkAll`) reconciles it with reality. `error` is kept only when `state` is `error`. A token either text of an existing row already names fails with `TokenAlreadyKnown`, which also covers a backup imported twice. This is the only way platform code writes a wallet row it did not obtain through an operation; it keeps the store's row identity, sparse payloads, and active-lane targeting in one place.
+
+```ts
+import { Effect, Schema } from "effect";
+import { ImportRowDraft, Tokens } from "@linky/linkshu";
+
+const decodeImportRowDraft = Schema.decodeUnknownOption(ImportRowDraft);
+
+const restoreBackupRow = (backup: {
+  token: string;
+  rawToken: string | null;
+  state: string | null;
+  error: string | null;
+}) => {
+  const draft = decodeImportRowDraft({
+    originalTokenText: backup.rawToken ?? backup.token,
+    tokenText: backup.token,
+    state: backup.state ?? "accepted",
+    error: backup.error,
+  });
+  if (draft._tag === "None") return Effect.succeed("skipped");
+  return Effect.flatMap(Tokens, (tokens) => tokens.importRow(draft.value)).pipe(
+    Effect.as("restored"),
+    Effect.catchTag("TokenAlreadyKnown", () => Effect.succeed("duplicate")),
+  );
+};
+```
+
 ## Token codec
 
 Pure and total: malformed input yields `null`, never a throw. Import from `@linky/linkshu`.
@@ -102,6 +132,7 @@ Supported formats: v3 (`cashuA`, base64url JSON), v4 (`cashuB`, base64url CBOR),
 | `TokenRowNotFound`       | transitions, `returnToWallet`    | no row with that id                                      | drop the reference                     |
 | `InvalidTokenTransition` | transitions, `returnToWallet`    | the state machine forbids it (`from`, `to` in the error) | refresh the row and re-check the state |
 | `ReceiveError` members   | `returnToWallet` on a re-receive | see [receive.md](./receive.md#errors)                    | same handling as a receive             |
+| `TokenAlreadyKnown`      | `importRow`                      | a row already has either token text                      | count it as already present            |
 
 `list`, `balances`, and `deleteSpent` never fail.
 

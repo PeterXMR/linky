@@ -6,10 +6,14 @@ import {
   WalletBalances,
   WalletToken,
 } from "./domain";
-import type { TokenState } from "./domain";
-import { transitionRow } from "./internal/lifecycle";
+import type { ImportRowDraft, TokenState } from "./domain";
+import {
+  findRowByTokenText,
+  insertRowInState,
+  transitionRow,
+} from "./internal/lifecycle";
 import { totalProofAmount } from "./internal/rowProofs";
-import { TokenRowNotFound } from "../domain/errors";
+import { TokenAlreadyKnown, TokenRowNotFound } from "../domain/errors";
 import { Amount, NonNegativeAmount, TokenRowId } from "../domain/primitives";
 import type { MintUrl } from "../domain/primitives";
 import { Inspector } from "../inspector/Inspector";
@@ -249,6 +253,34 @@ export class Tokens extends Effect.Service<Tokens>()("linkshu/Tokens", {
         return deleted;
       }).pipe(inspectOperation(inspector, "tokens.deleteSpent", {}));
 
+    const importRow = (
+      draft: ImportRowDraft,
+    ): Effect.Effect<TokenRowId, TokenAlreadyKnown> =>
+      Effect.gen(function* () {
+        const rows = yield* tokenStore.loadAll;
+        const known =
+          findRowByTokenText(rows, draft.originalTokenText) ??
+          findRowByTokenText(rows, draft.tokenText);
+        if (known !== null) {
+          return yield* new TokenAlreadyKnown({ rowId: known.id });
+        }
+        return yield* insertRowInState(tokenStore, inspector, {
+          originalTokenText: draft.originalTokenText,
+          tokenText: draft.tokenText,
+          state: draft.state,
+          error: draft.state === "error" ? draft.error : null,
+          reason: "import",
+        });
+      }).pipe(
+        inspectOperationWith(
+          inspector,
+          "tokens.importRow",
+          { state: draft.state },
+          (row) => ({ rowId: row.id, state: row.state }),
+        ),
+        Effect.map((row) => row.id),
+      );
+
     return {
       list,
       balances,
@@ -257,6 +289,7 @@ export class Tokens extends Effect.Service<Tokens>()("linkshu/Tokens", {
       markExternalized,
       returnToWallet,
       deleteSpent,
+      importRow,
     } as const;
   }),
 }) {}

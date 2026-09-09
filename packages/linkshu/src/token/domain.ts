@@ -109,3 +109,12 @@ export class WalletBalances extends Schema.Class<WalletBalances>(
   spendable: NonNegativeAmount,
   perMint: Schema.Array(MintBalance),
 }) {}
+
+export class ImportRowDraft extends Schema.Class<ImportRowDraft>(
+  "ImportRowDraft",
+)({
+  originalTokenText: TokenText,
+  tokenText: TokenText,
+  state: TokenState,
+  error: Schema.NullOr(Schema.String),
+}) {}

@@ -2567,6 +2567,7 @@ export const useCashuWalletComposition = ({
   }, [knownLnAddressPayContact, nostrPictureByNpub]);
 
   return {
+    cashuTokenLifecycle,
     applyDefaultMintSelection,
     canPayWithCashu,
     cancelPendingCashuContactSend,

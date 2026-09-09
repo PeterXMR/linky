@@ -38,6 +38,7 @@ Each vertical exports a union type and schema of the errors it can produce.
 | `FeeProbe.probeLightningFee`                                                | `FeeProbeError`                                                                              |
 | `Mints.info`                                                                | `MintUnreachable \| MintRejected`                                                            |
 | `Tokens.reserve`, `markIssued`, `markExternalized`                          | `TokenRowNotFound \| InvalidTokenTransition`                                                 |
+| `Tokens.importRow`                                                          | `TokenAlreadyKnown`                                                                          |
 | `Validation.checkRow`                                                       | `TokenRowNotFound`                                                                           |
 | `Validation.checkAll`, `Restore.restore`                                    | never — unreachable mints are listed in the report's `unavailableMints`                      |
 | `Validation.checkIssued`, `Tokens.deleteSpent`                              | never — rows they cannot verify stay untouched; the report does not say which mints answered |

@@ -759,6 +759,7 @@ export const useAppShellComposition = ({
     cashuTokensFiltered,
     cashuTokensHydratedRef,
     cashuTotalBalance,
+    cashuTokenLifecycle,
     checkAllCashuTokensAndDeleteInvalid,
     inspectCashuTokenProofStates,
     checkAndRefreshCashuToken,
@@ -1117,13 +1118,11 @@ export const useAppShellComposition = ({
   const { exportAppData, handleImportAppDataFilePicked, requestImportAppData } =
     useAppDataTransfer<(typeof contacts)[number]>({
       appOwnerId: contactsOwnerId,
-      cashuOwnerId,
       cashuTokens: cashuTokensFiltered,
-      cashuTokensAll: cashuTokensAllFiltered,
       contacts,
+      importCashuTokenRow: cashuTokenLifecycle?.importRow ?? null,
       importDataFileInputRef,
       insert,
-      upsert,
       pushToast,
       t,
       update,
