@@ -71,7 +71,6 @@ services:
       # per minute globally, 20 per minute for transactions) reject them
       # with 429 while a real user would never come close.
       MINT_RATE_LIMIT: "FALSE"
-      MINT_GLOBAL_RATE_LIMIT_PER_MINUTE: "1000000"
       MINT_TRANSACTION_RATE_LIMIT_PER_MINUTE: "1000000"
       # FakeWallet simulation knobs for payment-timing tests (defaults shown).
       # FAKEWALLET_BRR: "true"                  # auto-settle created invoices

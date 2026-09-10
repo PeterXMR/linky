@@ -1,18 +1,26 @@
 import { Effect, Layer, Stream } from "effect";
 import { getEventHash } from "nostr-tools";
-import type { Event as NostrToolsEvent, Filter } from "nostr-tools";
+import type { Event as NostrToolsEvent } from "nostr-tools";
 import { RelayUrl, UnixSeconds } from "./domain/primitives";
 import { runLinkstr } from "./headless";
 import { InboxCursorStore } from "./inbox/InboxCursorStore";
-import { NIP59_BACKDATE_MARGIN_SECONDS } from "./inbox/WrapInbox";
-import { WrapInbox } from "./inbox/WrapInbox";
+import { NIP59_BACKDATE_MARGIN_SECONDS, WrapInbox } from "./inbox/WrapInbox";
 import { wrapRumorFor } from "./internal/giftWrap";
 import { Rumor } from "./internal/nostrEvent";
 import type { NostrTags } from "./internal/nostrEvent";
-import { NostrTransport } from "./services/NostrTransport";
+import {
+  makeRelayPoolTransport,
+  NostrTransport,
+} from "./services/NostrTransport";
 import type { NostrTransportService } from "./services/NostrTransport";
 import { RelayPolicy } from "./services/RelayPolicy";
-import { eventually, makeIdentity, stubStorage } from "./testing";
+import {
+  eventually,
+  FakeRelay,
+  makeIdentity,
+  poolFor,
+  stubStorage,
+} from "./testing";
 
 const alice = makeIdentity();
 const bob = makeIdentity();
@@ -38,17 +46,6 @@ const transportOf = (
   publish: () => Effect.succeed([]),
   subscribe: () => Effect.never,
   fetch: (relay) => Effect.succeed(stored.get(relay) ?? []),
-});
-
-const recordingSubscribeTransport = (
-  filters: Array<Filter>,
-): NostrTransportService => ({
-  publish: () => Effect.succeed([]),
-  subscribe: (_relay, filter) =>
-    Effect.sync(() => {
-      filters.push(filter);
-    }).pipe(Effect.andThen(Effect.never)),
-  fetch: () => Effect.succeed([]),
 });
 
 const scopedTransportOf = (
@@ -122,35 +119,56 @@ describe("runLinkstr", () => {
     expect(lifecycle).toEqual(["open", "close", "open", "close"]);
   });
 
-  it("resumes the inbox from a supplied cursor store instead of since", async () => {
+  it("checkpoints a received wrap and resumes the next run from the supplied store", async () => {
     const storage = stubStorage();
-    const stored = UnixSeconds.make(1_756_000_000);
-    storage.setItem("cursor", String(stored));
-    const filters: Array<Filter> = [];
+    const fake = new FakeRelay();
+    const wrap = chatWrap();
+    const since = UnixSeconds.make(wrap.created_at - 3600);
+    const config = {
+      secretKey: alice.secretKey,
+      readRelays: [relayA],
+      inboxCursorStore: InboxCursorStore.fromStringStorage(storage, "cursor"),
+      transport: Layer.succeed(
+        NostrTransport,
+        makeRelayPoolTransport(poolFor(new Map([[relayA, fake]]))),
+      ),
+    };
 
-    await runLinkstr(
-      {
-        secretKey: alice.secretKey,
-        readRelays: [relayA],
-        inboxCursorStore: InboxCursorStore.fromStringStorage(storage, "cursor"),
-        transport: Layer.succeed(
-          NostrTransport,
-          recordingSubscribeTransport(filters),
-        ),
-      },
+    const received = await runLinkstr(
+      config,
       Effect.scoped(
         Effect.gen(function* () {
           const inbox = yield* WrapInbox;
-          const feed = yield* inbox.open({
-            since: UnixSeconds.make(1_755_000_000),
-          });
-          yield* Effect.forkScoped(Stream.runDrain(feed.events));
-          yield* eventually(() => filters.length === 1);
+          const feed = yield* inbox.open({ since });
+          yield* eventually(() => fake.subscriptions.length === 1);
+          fake.emit(wrap);
+          return yield* Stream.runCollect(Stream.take(feed.events, 1));
         }),
       ),
     );
 
-    expect(filters[0]?.since).toBe(stored - NIP59_BACKDATE_MARGIN_SECONDS);
+    expect(Array.from(received)[0]?.event._tag).toBe("ChatMessageReceived");
+    expect(storage.getItem("cursor")).toBe(String(wrap.created_at));
+    expect(fake.subscriptions[0]?.filters[0]?.since).toBe(
+      since - NIP59_BACKDATE_MARGIN_SECONDS,
+    );
+    expect(fake.subscriptions[0]?.closed).toBe(true);
+
+    await runLinkstr(
+      config,
+      Effect.scoped(
+        Effect.gen(function* () {
+          const inbox = yield* WrapInbox;
+          yield* inbox.open({ since });
+          yield* eventually(() => fake.subscriptions.length === 2);
+        }),
+      ),
+    );
+
+    expect(fake.subscriptions[1]?.filters[0]?.since).toBe(
+      wrap.created_at - NIP59_BACKDATE_MARGIN_SECONDS,
+    );
+    expect(fake.subscriptions[1]?.closed).toBe(true);
   });
 
   it("rejects with the effect's typed failure", async () => {
