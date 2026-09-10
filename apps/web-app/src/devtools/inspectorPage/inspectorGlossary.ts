@@ -64,6 +64,10 @@ const TAG_DESCRIPTIONS: Record<string, string> = {
     "User assigned the contacts just saved from a chat message to a group; the payload lists the contact ids and the group name.",
   ChatImageShareFailed:
     "System share of a chat image failed for a reason other than the user cancelling; the app fell back to a file download when triggered from the message menu.",
+  "mints.addKnownMint":
+    "linkshu recorded a mint in its known-mint set without contacting it. The payload names the mint; repeating the operation leaves one entry.",
+  "mints.removeKnownMint":
+    "linkshu tried to forget a known mint. MintInUse means stored token rows still name it; rowCount reports how many. Success removes the seen entry without contacting the mint.",
   "validation.inspectProofStates":
     "Read-only mint status check for the token list or detail. Reports unspent, pending, spent and unknown amounts per token row; follows row links without exposing proofs or secrets.",
   TokenLifecycleChanged:

@@ -65,7 +65,9 @@ Always go through `parseMintUrl` (or `MintUrl.make` on already-normalized input)
 
 `knownMints` is the union of the mints named by stored rows (any state) and the _seen_ mints. A mint is recorded as seen the first time any operation loads its wallet successfully — `Mints.info` included — or explicitly through `addKnownMint`, which needs no network and is the way to register a mint before it holds funds.
 
-`removeKnownMint` forgets a seen mint so `Restore` and `Validation` stop probing it. Stored rows name their mint themselves, so the call fails with `MintInUse` while any row (whatever its state) still does; delete or spend those rows first (`Tokens.deleteSpent` for `error` rows). `Restore.wipeSeedBoundState` leaves the seen set alone. Restore defaults to `knownMints` when you pass no `mints`.
+`removeKnownMint` removes a mint from the seen set used by default restore scans. It fails with `MintInUse` while any stored row still names the mint, regardless of state. Spending or changing a row's state does not necessarily remove it: `Tokens.deleteSpent` removes mint-confirmed spent `accepted` and `error` rows, and `Validation.checkIssued` removes claimed `issued` rows. Other rows must leave the store through their lifecycle before removal can succeed.
+
+`Validation` checks stored rows rather than the seen set. Explicit `RestoreDraft.mints` also bypasses the seen set; Linky's PWA supplies its own restore candidates. `Restore.wipeSeedBoundState` leaves the seen set alone. Restore defaults to `knownMints` when you pass no `mints`.
 
 Successful wallet loads are cached for the runtime's lifetime; a failed load is evicted so the next call retries.
 
@@ -92,11 +94,11 @@ Pure helpers, no runtime needed:
 
 ## Errors
 
-| Tag               | Raised by         | When                                                       | What to do                                    |
-| ----------------- | ----------------- | ---------------------------------------------------------- | --------------------------------------------- |
-| `MintUnreachable` | `info`            | network/timeout/5xx during wallet load                     | retry later; show cached info if you keep any |
-| `MintRejected`    | `info`            | the mint answered but its info/keysets are unusable        | surface `detail`                              |
-| `MintInUse`       | `removeKnownMint` | stored rows still name the mint (`rowCount` says how many) | delete or spend those rows, then retry        |
+| Tag               | Raised by         | When                                                       | What to do                                            |
+| ----------------- | ----------------- | ---------------------------------------------------------- | ----------------------------------------------------- |
+| `MintUnreachable` | `info`            | network/timeout/5xx during wallet load                     | retry later; show cached info if you keep any         |
+| `MintRejected`    | `info`            | the mint answered but its info/keysets are unusable        | surface `detail`                                      |
+| `MintInUse`       | `removeKnownMint` | stored rows still name the mint (`rowCount` says how many) | remove those rows through their lifecycle, then retry |
 
 `knownMints` and `addKnownMint` never fail.
 
