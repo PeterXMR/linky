@@ -12,12 +12,11 @@ export interface InspectedPlainResult<A> {
 
 /** Plain-event sibling of the reactions inspector tap. */
 export const inspectPlainOperation =
-  (inspector: InspectorService, name: string, rawParams: unknown) =>
+  (inspector: InspectorService, name: string, params: unknown) =>
   <A, E>(
     operation: Effect.Effect<InspectedPlainResult<A>, E>,
-  ): Effect.Effect<A, E> => {
-    const params = redactAttachmentKeys(rawParams);
-    return operation.pipe(
+  ): Effect.Effect<A, E> =>
+    operation.pipe(
       Effect.tap(({ eventIds, result }) =>
         Effect.sync(() =>
           inspector.emit(
@@ -25,7 +24,7 @@ export const inspectPlainOperation =
               new PlainOperationSucceeded(
                 {
                   name,
-                  params,
+                  params: redactAttachmentKeys(params),
                   eventIds,
                   result: redactAttachmentKeys(result),
                 },
@@ -40,11 +39,10 @@ export const inspectPlainOperation =
           inspector.emit(
             () =>
               new OperationFailed(
-                { name, params, error },
+                { name, params: redactAttachmentKeys(params), error },
                 { disableValidation: true },
               ),
           ),
         ),
       ),
     );
-  };

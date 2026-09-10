@@ -22,18 +22,21 @@ export const inspectOperation =
   <A>(
     inspector: InspectorService,
     name: string,
-    rawParams: unknown,
+    params: unknown,
     summarize: (receipt: A) => OperationReceiptSummary,
   ) =>
-  <T extends A, E>(operation: Effect.Effect<T, E>): Effect.Effect<T, E> => {
-    const params = redactAttachmentKeys(rawParams);
-    return operation.pipe(
+  <T extends A, E>(operation: Effect.Effect<T, E>): Effect.Effect<T, E> =>
+    operation.pipe(
       Effect.tap((receipt) =>
         Effect.sync(() =>
           inspector.emit(
             () =>
               new OperationSucceeded(
-                { name, params, ...summarize(receipt) },
+                {
+                  name,
+                  params: redactAttachmentKeys(params),
+                  ...summarize(receipt),
+                },
                 { disableValidation: true },
               ),
           ),
@@ -44,11 +47,10 @@ export const inspectOperation =
           inspector.emit(
             () =>
               new OperationFailed(
-                { name, params, error },
+                { name, params: redactAttachmentKeys(params), error },
                 { disableValidation: true },
               ),
           ),
         ),
       ),
     );
-  };
