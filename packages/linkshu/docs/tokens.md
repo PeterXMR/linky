@@ -66,7 +66,7 @@ Rows in other states are never swept: `issued` rows are pruned by `Validation.ch
 
 ### `importRow`
 
-`importRow(draft: ImportRowDraft)` restores one row from a backup exactly as the backup states it and returns its `TokenRowId`. The draft is `{ originalTokenText, tokenText, state, error }`; there is no receive, swap, or mint check, so a row comes back in whatever state it left with, and the next NUT-07 check (`Validation.checkAll`) reconciles it with reality. `error` is kept only when `state` is `error`. A token either text of an existing row already names fails with `TokenAlreadyKnown`, which also covers a backup imported twice. This is the only way platform code writes a wallet row it did not obtain through an operation; it keeps the store's row identity, sparse payloads, and active-lane targeting in one place.
+`importRow(draft: ImportRowDraft)` restores one row from a backup exactly as the backup states it and returns its `TokenRowId`. The draft is `{ originalTokenText, tokenText, state, error }`; there is no receive, swap, or mint check, so a row comes back in whatever state it left with, and later checks reconcile it with the mint according to its state. `Validation.checkAll` checks accepted and error rows; it does not settle reserved or pending operations. `error` is kept only when `state` is `error`. If either draft token text matches an existing row's current or original encoding, the import fails with `TokenAlreadyKnown`, which also covers a backup imported twice. This is the only way platform code writes a wallet row it did not obtain through an operation; it keeps the store's row identity, sparse payloads, and active-lane targeting in one place.
 
 ```ts
 import { Effect, Schema } from "effect";

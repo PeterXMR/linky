@@ -42,6 +42,8 @@ export const cs = {
   exportDone: "Export hotov.",
   exportFailed: "Export se nepovedl.",
   importDone: "Import hotov.",
+  importWalletNotReady:
+    "Peněženka se ještě načítá. Zkuste import za chvíli znovu.",
   importFailed: "Import se nepovedl.",
   importInvalid: "Neplatný import soubor.",
   importNothing: "Není co importovat.",

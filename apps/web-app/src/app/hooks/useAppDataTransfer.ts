@@ -23,7 +23,7 @@ interface UseAppDataTransferParams<TContact extends ContactRowLike> {
   appOwnerId: Evolu.OwnerId | null;
   cashuTokens: readonly CashuTokenRow[];
   contacts: readonly TContact[];
-  /** Null until the wallet runtime is up; token rows are then skipped. */
+  /** Null until the wallet runtime is ready to restore token rows. */
   importCashuTokenRow: CashuTokenLifecycle["importRow"] | null;
   importDataFileInputRef: React.RefObject<HTMLInputElement | null>;
   insert: EvoluMutations["insert"];
@@ -61,7 +61,9 @@ export const useAppDataTransfer = <TContact extends ContactRowLike>({
         })),
         cashuTokens: cashuTokens.map((token) => {
           const tokenText = (token.token ?? "").trim();
-          const rawToken = (token.rawToken ?? "").trim();
+          const rawToken =
+            (token.originalTokenText ?? "").trim() ||
+            (token.rawToken ?? "").trim();
           return {
             token: tokenText,
             rawToken: rawToken && rawToken !== tokenText ? rawToken : null,
@@ -132,6 +134,11 @@ export const useAppDataTransfer = <TContact extends ContactRowLike>({
       const importedTokens = Array.isArray(root.cashuTokens)
         ? root.cashuTokens
         : [];
+
+      if (importedTokens.length > 0 && importCashuTokenRow === null) {
+        pushToast(t("importWalletNotReady"));
+        return;
+      }
 
       const existingByNpub = new Map<string, TContact>();
       const existingByLn = new Map<string, TContact>();
@@ -208,24 +215,25 @@ export const useAppDataTransfer = <TContact extends ContactRowLike>({
         }
       }
 
-      for (const item of importedTokens) {
-        if (importCashuTokenRow === null) break;
-        const rec = asRecord(item);
-        if (!rec) continue;
-        const token = String(rec.token ?? "").trim();
-        if (!token) continue;
+      if (importCashuTokenRow !== null) {
+        for (const item of importedTokens) {
+          const rec = asRecord(item);
+          if (!rec) continue;
+          const token = String(rec.token ?? "").trim();
+          if (!token) continue;
 
-        const draft = decodeImportRowDraft({
-          originalTokenText: sanitizeText(rec.rawToken, 100000) ?? token,
-          tokenText: token,
-          state:
-            normalizeCashuTokenState(rec.state) ?? CASHU_TOKEN_STATE_ACCEPTED,
-          error: sanitizeText(rec.error, 1000),
-        });
-        if (Option.isNone(draft)) continue;
+          const draft = decodeImportRowDraft({
+            originalTokenText: sanitizeText(rec.rawToken, 100000) ?? token,
+            tokenText: token,
+            state:
+              normalizeCashuTokenState(rec.state) ?? CASHU_TOKEN_STATE_ACCEPTED,
+            error: sanitizeText(rec.error, 1000),
+          });
+          if (Option.isNone(draft)) continue;
 
-        const result = await importCashuTokenRow(draft.value);
-        if (Either.isRight(result)) addedTokens += 1;
+          const result = await importCashuTokenRow(draft.value);
+          if (Either.isRight(result)) addedTokens += 1;
+        }
       }
 
       if (addedContacts === 0 && updatedContacts === 0 && addedTokens === 0) {

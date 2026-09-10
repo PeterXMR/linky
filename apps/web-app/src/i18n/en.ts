@@ -43,6 +43,8 @@ export const en = {
   exportDone: "Export complete.",
   exportFailed: "Export failed.",
   importDone: "Import complete.",
+  importWalletNotReady:
+    "The wallet is still loading. Try importing again in a moment.",
   importFailed: "Import failed.",
   importInvalid: "Invalid import file.",
   importNothing: "Nothing to import.",
