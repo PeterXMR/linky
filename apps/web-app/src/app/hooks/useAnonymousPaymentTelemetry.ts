@@ -27,8 +27,6 @@ interface UseAnonymousPaymentTelemetryParams {
 }
 
 const PAYMENT_TELEMETRY_FLUSH_INTERVAL_MS = 45_000;
-/** Telemetry shares the outbox's FIFO lane with chat, so it is drained in
- * small batches rather than all at once. */
 const MAX_ITEMS_PER_FLUSH = 10;
 const isClientId = Schema.is(ClientId);
 const isUnixSeconds = Schema.is(UnixSeconds);

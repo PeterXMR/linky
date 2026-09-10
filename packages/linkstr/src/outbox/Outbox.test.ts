@@ -281,7 +281,7 @@ describe("Outbox", () => {
     );
   });
 
-  it("processes queued jobs strictly FIFO across operation types", async () => {
+  it("processes foreground jobs strictly FIFO across operation types", async () => {
     const published: Array<SignedWrapEvent> = [];
     const store = makeStore();
 
@@ -314,7 +314,7 @@ describe("Outbox", () => {
     expect(reaction.receipt.rumorId).toBe(receipts[1]?.rumorId);
   });
 
-  it("keeps delivering chat sends while a telemetry job keeps failing", async () => {
+  it("keeps delivering chat and reactions while a telemetry job keeps failing", async () => {
     const published: Array<SignedWrapEvent> = [];
     const collector = makeIdentity();
     const collectorAccepts = { accept: false };
@@ -342,8 +342,9 @@ describe("Outbox", () => {
         );
         yield* eventually(() => published.length >= 1);
         yield* outbox.enqueue(textOp("hello"), OutboxRef.make("row-1"));
-        yield* eventually(() => collected.some((r) => r.ref === "row-1"));
-        expect(collected.map((r) => r.ref)).toEqual(["row-1"]);
+        yield* outbox.enqueue(reactionOp(), OutboxRef.make("reaction-1"));
+        yield* eventually(() => collected.some((r) => r.ref === "reaction-1"));
+        expect(collected.map((r) => r.ref)).toEqual(["row-1", "reaction-1"]);
 
         collectorAccepts.accept = true;
         yield* outbox.enqueueTelemetry(
@@ -351,13 +352,14 @@ describe("Outbox", () => {
           collector.pubkey,
           OutboxRef.make("telemetry:2"),
         );
-        yield* eventually(() => collected.length === 3);
+        yield* eventually(() => collected.length === 4);
         return collected;
       }).pipe(Effect.scoped),
     );
 
     expect(results.map((result) => result.ref)).toEqual([
       "row-1",
+      "reaction-1",
       "telemetry:1",
       "telemetry:2",
     ]);
