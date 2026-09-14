@@ -12,6 +12,18 @@ používá také v Google Play a musí se vejít do 500 znaků na jazyk.
 
 ## [Unreleased]
 
+## [26.9.15] - 2026-09-14
+
+### en-US
+
+- Reclaim unspent Cashu tokens, including tokens written to NFC, and inspect individual coin proofs.
+- Improved wallet recovery refreshes recovered coins and keeps tokens that can still be claimed accessible.
+
+### cs-CZ
+
+- Vraťte neutracené Cashu tokeny do peněženky, včetně tokenů zapsaných na NFC, a prohlížejte jednotlivé doklady mincí.
+- Vylepšená obnova peněženky vymění obnovené mince za nové a zachová přístup k tokenům, které lze stále vyzvednout.
+
 ## [26.9.14] - 2026-09-12
 
 ### en-US
