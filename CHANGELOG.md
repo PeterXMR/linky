@@ -12,6 +12,18 @@ používá také v Google Play a musí se vejít do 500 znaků na jazyk.
 
 ## [Unreleased]
 
+## [26.9.16] - 2026-09-14
+
+### en-US
+
+- Wallet recovery now shows activity and scan progress across mint keysets while looking for missing tokens.
+- Pending tokens now show only outgoing transfers.
+
+### cs-CZ
+
+- Obnova peněženky nyní při hledání chybějících tokenů zobrazuje probíhající činnost a průběh prohledávání sad klíčů mintů.
+- Čekající tokeny nyní zobrazují pouze odchozí převody.
+
 ## [26.9.15] - 2026-09-14
 
 ### en-US
