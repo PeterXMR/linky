@@ -27,6 +27,14 @@ describe("isKeysetVerificationError", () => {
     ).toBe(true);
   });
 
+  it("matches the keychain's per-keyset verification failure", () => {
+    expect(
+      isKeysetVerificationError(
+        new Error("Keyset verification failed for ID 01884a74bb2fc5ee"),
+      ),
+    ).toBe(true);
+  });
+
   it("keeps matching legacy keyset verification failures", () => {
     expect(
       isKeysetVerificationError(

@@ -63,6 +63,7 @@ export const isKeysetVerificationError = (error: unknown): boolean => {
   const message = errorMessage(error, "").toLowerCase();
   return (
     message.includes("couldn't verify keyset id") ||
+    message.includes("keyset verification failed") ||
     message.includes("short keyset id v2") ||
     message.includes("got no keysets to map it to") ||
     message.includes("couldn't map short keyset id")

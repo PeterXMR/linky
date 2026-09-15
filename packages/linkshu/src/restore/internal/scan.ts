@@ -2,6 +2,7 @@ import { Effect, Either } from "effect";
 import type { MintRejected, MintUnreachable } from "../../domain/errors";
 import { unspentProofs } from "../../internal/proofStates";
 import type { ProofStateEntry } from "../../internal/proofStates";
+import { isKeysetVerificationError } from "../../mint/internal/loadWallet";
 import type { Proof } from "../../token/domain";
 
 /**
@@ -44,7 +45,12 @@ export type KeysetScan =
       readonly nextCursor: number | null;
       readonly proofs: ReadonlyArray<Proof>;
     }
-  | { readonly status: "unavailable" };
+  | { readonly status: "unavailable" }
+  | { readonly status: "skipped"; readonly detail: string };
+
+const isDefinitiveRejection = (failure: MintFailure): failure is MintRejected =>
+  failure._tag === "MintRejected" &&
+  (failure.code !== null || isKeysetVerificationError(failure.detail));
 
 const nextCursorFrom = (
   ...positions: ReadonlyArray<number | null>
@@ -105,4 +111,13 @@ export const scanKeyset = (input: KeysetScanInput): Effect.Effect<KeysetScan> =>
 
     const scan: KeysetScan = { status: "ok", nextCursor, proofs };
     return scan;
-  }).pipe(Effect.orElseSucceed((): KeysetScan => ({ status: "unavailable" })));
+  }).pipe(
+    Effect.catchAll(
+      (failure): Effect.Effect<KeysetScan> =>
+        Effect.succeed(
+          isDefinitiveRejection(failure)
+            ? { status: "skipped", detail: failure.detail }
+            : { status: "unavailable" },
+        ),
+    ),
+  );
