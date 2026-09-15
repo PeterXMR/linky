@@ -33,7 +33,11 @@ import {
 } from "./app/lib/cashuNotificationCopy";
 import { NOSTR_RELAYS } from "./utils/nostrRelays";
 import { getStoredPushContactName } from "./utils/pushContactNamesStorage";
-import { appendPushDebugLog, flushPushDebugLog } from "./utils/pushDebugLog";
+import {
+  appendPushDebugLog,
+  fingerprintPubkey,
+  flushPushDebugLog,
+} from "./utils/pushDebugLog";
 import { getStoredPushNsec } from "./utils/pushNsecStorage";
 import { formatShortNpub } from "./utils/formatting";
 
@@ -67,6 +71,13 @@ interface DecryptedPushMessage {
   isCashu: boolean;
   isPaymentNotice: boolean;
   senderPub: string;
+}
+
+type NotificationTitleKind = "contact" | "sender" | "recipient" | "fallback";
+
+interface NotificationTitle {
+  kind: NotificationTitleKind;
+  title: string;
 }
 
 function readPushNotificationData(value: unknown): PushNotificationData {
@@ -188,21 +199,21 @@ function buildNotificationTitle(
   envelope: PushNotificationEnvelope,
   decryptedMessage: DecryptedPushMessage | null,
   senderContactName: string | null,
-): string {
+): NotificationTitle {
   const contactName = (senderContactName ?? "").trim();
-  if (contactName) return `Linky - ${contactName}`;
+  if (contactName) return { kind: "contact", title: `Linky - ${contactName}` };
 
   const senderLabel = decryptedMessage
     ? formatNotificationPeerLabel(decryptedMessage.senderPub)
     : "";
-  if (senderLabel) return `Linky - ${senderLabel}`;
+  if (senderLabel) return { kind: "sender", title: `Linky - ${senderLabel}` };
 
   const recipientLabel = formatShortNpub(
     envelope.data?.recipientNpub ?? envelope.data?.recipientPubkey ?? "",
   );
   return recipientLabel
-    ? `Linky - ${recipientLabel}`
-    : (envelope.title ?? "Linky");
+    ? { kind: "recipient", title: `Linky - ${recipientLabel}` }
+    : { kind: "fallback", title: envelope.title ?? "Linky" };
 }
 
 function sanitizeSpaydFilename(value: string): string {
@@ -381,8 +392,9 @@ async function decryptIncomingMessageBody(
   if (!recipientPubkey || recipientPubkey !== myPubHex) {
     logSw("sw decrypt failed because recipient pubkey did not match", {
       data: envelope.data ?? {},
-      derivedPubkey: myPubHex,
+      derivedPubkeyFingerprint: fingerprintPubkey(myPubHex),
       hasRecipientPubkey: Boolean(recipientPubkey),
+      recipientPubkeyFingerprint: fingerprintPubkey(recipientPubkey),
     });
     return null;
   }
@@ -408,7 +420,6 @@ async function decryptIncomingMessageBody(
     data: envelope.data ?? {},
     isCashuMessage: message.isCashu,
     isPaymentNotice: message.isPaymentNotice,
-    senderPub: message.senderPub,
   });
   return message;
 }
@@ -530,7 +541,7 @@ self.addEventListener("push", (event) => {
   const data = envelope.data ?? { type: "nostr_inbox" };
   logSw("push event parsed", {
     data,
-    title: envelope.title ?? "Linky",
+    hasTitle: typeof envelope.title === "string",
   });
 
   if ("setAppBadge" in navigator) {
@@ -598,7 +609,7 @@ self.addEventListener("push", (event) => {
         shouldSuppressNotification,
         usedFallbackBody: decryptedMessage === null && fallbackBody.length > 0,
         tag: options.tag ?? null,
-        title: notificationTitle,
+        titleKind: notificationTitle.kind,
       });
       await Promise.all([
         postClientMessage({
@@ -606,7 +617,7 @@ self.addEventListener("push", (event) => {
           type: "push-received",
         }),
         self.registration
-          .showNotification(notificationTitle, options)
+          .showNotification(notificationTitle.title, options)
           .then(() =>
             logSw("notification displayed", {
               data,
