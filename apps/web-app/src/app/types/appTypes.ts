@@ -93,7 +93,7 @@ export type LocalNostrMessage = {
   replyToId?: string | null;
   rootMessageId?: string | null;
   rumorId: string | null;
-  status?: "sent" | "pending";
+  status?: "sent" | "pending" | "failed";
   wrapId: string;
 };
 
@@ -104,7 +104,7 @@ export type LocalNostrReaction = {
   id: string;
   messageId: string;
   reactorPubkey: string;
-  status?: "sent" | "pending";
+  status?: "sent" | "pending" | "failed";
   wrapId: string;
 };
 
@@ -200,7 +200,7 @@ export type TopbarButton = {
 };
 
 export type NewLocalNostrMessage = Omit<LocalNostrMessage, "id" | "status"> & {
-  status?: "sent" | "pending";
+  status?: "sent" | "pending" | "failed";
 };
 
 type UpdateLocalNostrMessageFields = Pick<
@@ -231,7 +231,7 @@ export type NewLocalNostrReaction = Omit<
   LocalNostrReaction,
   "id" | "status"
 > & {
-  status?: "sent" | "pending";
+  status?: "sent" | "pending" | "failed";
 };
 
 type UpdateLocalNostrReactionFields = Pick<

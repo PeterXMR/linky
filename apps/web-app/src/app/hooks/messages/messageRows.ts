@@ -38,8 +38,12 @@ type Mutable<T> = { -readonly [K in keyof T]: T[K] };
 const toText = (value: unknown): string =>
   typeof value === "string" ? value : "";
 
-const toStatus = (value: unknown): "pending" | "sent" =>
-  trimString(value) === "pending" ? "pending" : "sent";
+const toStatus = (value: unknown): "pending" | "sent" | "failed" => {
+  const normalized = trimString(value);
+  return normalized === "pending" || normalized === "failed"
+    ? normalized
+    : "sent";
+};
 
 const toPositiveInt = (value: unknown, fallback: number): number => {
   const asNumber = Number(value ?? 0);

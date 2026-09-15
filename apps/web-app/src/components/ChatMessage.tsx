@@ -88,6 +88,7 @@ interface ChatMessageProps {
   canEdit: boolean;
   canActOnPaymentRequest: boolean;
   canReplyOrReact: boolean;
+  chatFailedLabel: string;
   chatPendingLabel: string;
   chatSeenLabel: string;
   declineInfo: { requestRumorId: string | null } | null;
@@ -184,6 +185,7 @@ function ChatMessageComponent({
   canEdit,
   canActOnPaymentRequest,
   canReplyOrReact,
+  chatFailedLabel,
   chatPendingLabel,
   chatSeenLabel,
   declineInfo,
@@ -232,7 +234,9 @@ function ChatMessageComponent({
   const messageDivRef = React.useRef<HTMLDivElement | null>(null);
 
   const isOut = message.direction === "out";
-  const isPending = isOut && (message.status ?? "sent") === "pending";
+  const sendStatus = isOut ? (message.status ?? "sent") : "sent";
+  const isPending = sendStatus === "pending";
+  const isFailed = sendStatus === "failed";
   const content = message.content;
   const privateImageInfo = React.useMemo(
     () => parsePrivateImageMessage(content),
@@ -698,7 +702,7 @@ function ChatMessageComponent({
 
       {isIdentityChangeMessage ? null : (
         <div
-          className={`chat-message ${isOut ? "out" : "in"}${isPending ? " pending" : ""}${isSeen ? " seen" : ""}`}
+          className={`chat-message ${isOut ? "out" : "in"}${isPending ? " pending" : ""}${isFailed ? " failed" : ""}${isSeen ? " seen" : ""}`}
           data-message-id={messageId || undefined}
           data-rumor-id={rumorId ?? undefined}
           data-reply-to-id={replyToId ?? undefined}
@@ -974,6 +978,7 @@ function ChatMessageComponent({
                 </>
               ) : null}
               {isPending ? ` · ${chatPendingLabel}` : ""}
+              {isFailed ? ` · ${chatFailedLabel}` : ""}
             </div>
           ) : null}
         </div>

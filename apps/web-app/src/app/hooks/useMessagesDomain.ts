@@ -86,8 +86,12 @@ const RETENTION_PRUNE_THROTTLE_MS = 900;
 const toText = (value: unknown): string =>
   typeof value === "string" ? value : "";
 
-const toMessageStatus = (value: unknown): "pending" | "sent" =>
-  trimString(value) === "pending" ? "pending" : "sent";
+const toMessageStatus = (value: unknown): "pending" | "sent" | "failed" => {
+  const normalized = trimString(value);
+  return normalized === "pending" || normalized === "failed"
+    ? normalized
+    : "sent";
+};
 
 const migrationKeyForOwner = (ownerId: string): string =>
   `linky.messages_evolu_migrated_v${MESSAGE_MIGRATION_VERSION}:${ownerId}`;

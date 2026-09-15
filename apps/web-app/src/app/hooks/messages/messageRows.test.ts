@@ -8,6 +8,7 @@ import {
   PositiveInt,
   type ConversationRow,
   type MessageRow,
+  type ReactionRow,
 } from "@linky/linksync";
 import { describe, expect, it } from "vitest";
 import {
@@ -15,6 +16,7 @@ import {
   localMessageFrom,
   normalizeLegacyLocalMessage,
   toLocalNostrMessage,
+  toLocalNostrReaction,
   toMessagePatch,
   toMessageWriteRow,
   toReactionPatch,
@@ -92,6 +94,84 @@ describe("toLocalNostrMessage", () => {
       localOnly: false,
     });
     expect(toLocalNostrMessage(row, undefined)).toBeNull();
+  });
+});
+
+describe("failed status round trip", () => {
+  it("keeps a failed message failed from write row to UI shape", () => {
+    const written = toMessageWriteRow(
+      createId<"Message">(),
+      conversationId,
+      {
+        contactId,
+        direction: "out",
+        content: "never delivered",
+        wrapId: "",
+        rumorId: null,
+        pubkey: "",
+        createdAtSec: 1_700_000_002,
+        status: "failed",
+        localOnly: false,
+        replyToId: null,
+        replyToContent: null,
+        rootMessageId: null,
+        editedAtSec: null,
+        editedFromId: null,
+        isEdited: false,
+        originalContent: null,
+      },
+      "pending:local-2",
+    );
+    expect(written?.status).toBe("failed");
+    expect(toMessagePatch({ id: "m", status: "failed" })).toEqual({
+      status: "failed",
+    });
+    const row = messageRow({
+      direction: NonEmptyString100.orThrow("out"),
+      status: NonEmptyString100.orThrow("failed"),
+    });
+    expect(toLocalNostrMessage(row, contactId)?.status).toBe("failed");
+    expect(
+      normalizeLegacyLocalMessage({
+        contactId,
+        direction: "out",
+        content: "never delivered",
+        status: "failed",
+      })?.status,
+    ).toBe("failed");
+  });
+
+  it("keeps a failed reaction failed from write row to UI shape", () => {
+    const written = toReactionWriteRow(
+      createId<"Reaction">(),
+      conversationId,
+      {
+        messageId: "rumor-1",
+        reactorPubkey: "pk",
+        emoji: "👍",
+        wrapId: "wrap-r",
+        createdAtSec: 5,
+        status: "failed",
+      },
+      "wrap-r",
+    );
+    expect(written?.status).toBe("failed");
+    expect(toReactionPatch({ id: "r", status: "failed" })).toEqual({
+      status: "failed",
+    });
+    const row: ReactionRow = {
+      id: createId<"Reaction">(),
+      conversationId,
+      messageId: NonEmptyString1000.orThrow("rumor-1"),
+      reactorPubkey: NonEmptyString1000.orThrow("pk"),
+      emoji: NonEmptyString100.orThrow("👍"),
+      wrapId: NonEmptyString1000.orThrow("wrap-r"),
+      createdAtSec: PositiveInt.orThrow(5),
+      clientId: null,
+      status: NonEmptyString100.orThrow("failed"),
+      ...system,
+    };
+    expect(toLocalNostrReaction(row)?.status).toBe("failed");
   });
 });
 
