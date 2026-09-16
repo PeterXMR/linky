@@ -20,14 +20,9 @@ import { Avatar } from "./Avatar";
 import { AvatarControlGrid } from "./AvatarControlGrid";
 import { AvatarPhotoInput } from "./AvatarPhotoInput";
 import { ModalSheet } from "./ModalSheet";
-import {
-  PasswordManagerSaveForm,
-  type PasswordManagerSaveFormHandle,
-} from "./PasswordManagerSaveForm";
 import { SelfieCaptureModal } from "./SelfieCaptureModal";
 
 import type { Translate } from "../i18n";
-import { sleep } from "../utils/time";
 
 type UnauthenticatedLayoutProps = {
   confirmPendingOnboardingProfile: () => Promise<void>;
@@ -97,8 +92,6 @@ export const UnauthenticatedLayout: React.FC<UnauthenticatedLayoutProps> = ({
     () => setSelfieCaptureIsOpen(false),
     [],
   );
-  const passwordManagerSaveFormRef =
-    React.useRef<PasswordManagerSaveFormHandle | null>(null);
 
   const renderPickerMenu = () => {
     if (!pickerMenuIsOpen) return null;
@@ -439,10 +432,7 @@ export const UnauthenticatedLayout: React.FC<UnauthenticatedLayoutProps> = ({
       const password = profile.slip39Seed;
 
       if (username && password) {
-        passwordManagerSaveFormRef.current?.requestSave();
         await savePendingOnboardingBackupToPasswordManager(username, password);
-
-        await sleep(150);
       }
 
       await confirmPendingOnboardingProfile();
@@ -464,12 +454,6 @@ export const UnauthenticatedLayout: React.FC<UnauthenticatedLayoutProps> = ({
 
     return (
       <>
-        <PasswordManagerSaveForm
-          ref={passwordManagerSaveFormRef}
-          username={profile.name.trim()}
-          password={profile.slip39Seed}
-        />
-
         <form
           className="onboarding-avatar-scroll"
           onSubmit={(event) => void submitProfile(event)}
