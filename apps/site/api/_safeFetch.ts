@@ -6,7 +6,9 @@ import {
   type IPVersion,
   type LookupFunction,
 } from "node:net";
-import { Agent, fetch } from "undici";
+import type { ReadableStream } from "node:stream/web";
+// The explicit entry bypasses Bun's shim, which ignores connect.lookup.
+import { Agent, fetch } from "undici/index.js";
 
 const MAX_REDIRECTS = 3;
 const HOP_TIMEOUT_MS = 12_000;
@@ -127,7 +129,27 @@ const pinnedLookup =
     else callback(null, first.address, first.family);
   };
 
-const pinnedTransport: Transport = {
+const readBoundedBody = async (
+  body: ReadableStream<Uint8Array> | null,
+): Promise<string> => {
+  if (!body) return "";
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let length = 0;
+  while (true) {
+    const chunk = await reader.read();
+    if (chunk.done) break;
+    length += chunk.value.byteLength;
+    if (length > MAX_BODY_BYTES) {
+      await reader.cancel();
+      throw new Error("Proxy response is too large");
+    }
+    chunks.push(chunk.value);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+};
+
+export const pinnedTransport: Transport = {
   lookup: (hostname) => dns.lookup(hostname, { all: true }),
   request: async (url, addresses) => {
     const agent = new Agent({
@@ -143,7 +165,7 @@ const pinnedTransport: Transport = {
       });
       return {
         status: response.status,
-        text: await response.text(),
+        text: await readBoundedBody(response.body),
         contentType: response.headers.get("content-type"),
         location: response.headers.get("location"),
       };

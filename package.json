@@ -1,7 +1,7 @@
 {
   "name": "linky",
   "private": true,
-  "version": "26.9.16",
+  "version": "26.9.17",
   "license": "0BSD",
   "packageManager": "bun@1.3.9",
   "workspaces": [
@@ -40,6 +40,7 @@
     "check-code": "bun run typecheck && bun run eslint && bun run prettier"
   },
   "patchedDependencies": {
-    "nostr-tools@2.23.3": "patches/nostr-tools@2.23.3.patch"
+    "nostr-tools@2.23.3": "patches/nostr-tools@2.23.3.patch",
+    "bysquare@4.0.0": "patches/bysquare@4.0.0.patch"
   }
 }

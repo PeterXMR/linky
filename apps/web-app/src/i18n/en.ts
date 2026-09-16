@@ -157,6 +157,7 @@ export const en = {
   bankPaymentOfferStaggerDelayIncrease: "Increase delay",
   custom: "Custom",
   restore: "Restore",
+  claimOwnLightningAddressInvoiceInvalid: "Invalid or expired payment invoice",
   claimOwnLightningAddressPurchase: "Purchase",
   claimOwnLightningAddressPurchaseFor: "Purchase for {amount}",
   claimOwnLightningAddressPurchasing: "Purchasing...",
@@ -205,6 +206,7 @@ export const en = {
   nostrRelay: "Nostr relay",
   evoluServer: "Evolu server",
   addRelay: "Add relay",
+  invalidRelayUrl: "Enter a secure WebSocket relay URL (wss://).",
   relayUrl: "Relay URL",
   relayStatusLabel: "Status",
   relayStateConnected: "Connected",
@@ -850,6 +852,8 @@ export const en = {
   paymentRequestPreviewOutgoing: "You are requesting {amount}",
   paymentRequestDeclinedPreviewIncoming: "Payment request declined",
   paymentRequestDeclinedPreviewOutgoing: "You declined the payment request",
+  paymentRequestChanged:
+    "This request changed. Ask the sender for a new payment request.",
   paymentRequestStatusRequested: "Requested",
   paymentRequestStatusPaid: "Paid",
   paymentRequestStatusDeclined: "Declined",
@@ -890,6 +894,8 @@ export const en = {
   lightningInvoiceConfirmUnknownAmount: "Unknown amount",
   payPaying: "Paying…",
   payQueuedMessage: "Queued payment {amount} {unit} → {name}.",
+  payApprovalChanged:
+    "Payment approval is no longer valid. Review the recipient and pay again.",
   payFailed: "Payment failed",
   payPending:
     "Payment is waiting for the mint to confirm it. It finishes on its own once the mint answers.",

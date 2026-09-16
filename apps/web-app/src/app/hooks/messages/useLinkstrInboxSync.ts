@@ -1,3 +1,6 @@
+import { createContactNameFormatter } from "../../../utils/contactName";
+import { reportAppLog } from "../../../devtools/inspector/appLog";
+import { BankOfferAuthorization } from "./bankOfferAuthorization";
 import { Schema } from "effect";
 import { decodeNpub, identityFromNsec, UnixSeconds } from "@linky/linkstr";
 import type { InboxDelivery, WrapInboxEvent } from "@linky/linkstr";
@@ -79,12 +82,14 @@ const deriveMyPubkey = (currentNsec: string | null): string | null => {
 
 type InboxContactRowLike = ContactNameRowLike & {
   npub?: string | null | undefined;
+  nameSetByUser?: number | null | undefined;
 };
 
 const buildContactIndex = (
   contacts: readonly InboxContactRowLike[],
 ): Map<string, InboxContact> => {
   const contactByPubkey = new Map<string, InboxContact>();
+  const formatName = createContactNameFormatter(contacts);
   // Archived contacts stay in the index: their incoming messages land on the
   // contact itself, which then restores it from the archive.
   for (const contact of contacts) {
@@ -95,7 +100,7 @@ const buildContactIndex = (
     if (!pubkey || !id) continue;
     contactByPubkey.set(pubkey, {
       id,
-      name: trimString(contact.name) || null,
+      name: formatName(contact) || null,
       npub,
     });
   }
@@ -157,6 +162,7 @@ export const useLinkstrInboxSync = (params: UseLinkstrInboxSyncParams) => {
     [currentNsec],
   );
 
+  const bankOfferAuthorizationRef = React.useRef(new BankOfferAuthorization());
   const reactionSessionStateRef = React.useRef(
     createReactionInboxSessionState(),
   );
@@ -278,7 +284,6 @@ export const useLinkstrInboxSync = (params: UseLinkstrInboxSyncParams) => {
         case "BankOfferSnapshotReceived":
         case "OwnBankOfferSnapshotConfirmed": {
           if (cutoff !== null && event.sentAt < cutoff) return;
-          const isSelfAuthored = event._tag === "OwnBankOfferSnapshotConfirmed";
           const peerPubkey =
             event._tag === "OwnBankOfferSnapshotConfirmed"
               ? event.to
@@ -288,17 +293,32 @@ export const useLinkstrInboxSync = (params: UseLinkstrInboxSyncParams) => {
             notificationsCtx.findContact(peerPubkey)?.id ??
             buildUnknownContactId(peerPubkey);
           if (!contactId) return;
-          handleBankOfferSnapshotReceived(
+          const snapshots = bankOfferAuthorizationRef.current.receive(
             event,
-            {
-              contactId,
-              delivery,
-              isOutgoing: event.offerer === myPubkey,
-              isSelfAuthored,
-              peerPubkey,
-            },
-            notificationsCtx,
+            myPubkey,
+            contactId,
+            notificationsCtx.bankPaymentOfferMessages,
           );
+          if (snapshots.length === 0)
+            reportAppLog({
+              tag: "bankOffer.snapshotNotAuthorized",
+              summary: "Bank offer snapshot lacks matching authorization",
+              links: { rumor: event.snapshotId, offer: event.offerId },
+              payload: { status: event.status },
+            });
+          for (const snapshot of snapshots)
+            handleBankOfferSnapshotReceived(
+              snapshot,
+              {
+                contactId,
+                delivery,
+                isOutgoing: event.offerer === myPubkey,
+                isSelfAuthored:
+                  snapshot._tag === "OwnBankOfferSnapshotConfirmed",
+                peerPubkey,
+              },
+              notificationsCtx,
+            );
           return;
         }
         case "SeenReceiptReceived":
@@ -316,6 +336,7 @@ export const useLinkstrInboxSync = (params: UseLinkstrInboxSyncParams) => {
 
   React.useEffect(() => {
     if (!enabled || !currentNsec || myPubkey === null) return;
+    bankOfferAuthorizationRef.current = new BankOfferAuthorization();
     reactionSessionStateRef.current = createReactionInboxSessionState();
     identitySinceSecRef.current =
       getInitialNostrIdentitySource() === "custom"

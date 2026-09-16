@@ -22,6 +22,13 @@ interface SaveCashuFromTextOptions {
   navigateToTokens?: boolean;
   navigateToWallet?: boolean;
   requestId?: string;
+  /**
+   * Reports whether the attempt ended terminally (received, already known, or
+   * permanently spent — never worth retrying) or transiently (mint offline,
+   * lock contention — retry later). Lets the caller persist a "do not
+   * auto-retry" decision without re-deriving it from token text.
+   */
+  onResolved?: (resolution: "terminal" | "transient") => void;
 }
 
 interface UseSaveCashuFromTextParams {
@@ -83,11 +90,13 @@ export const useSaveCashuFromText = ({
       }
       if (isCashuTokenStored(tokenRaw)) {
         setStatus(t("cashuExists"));
+        options?.onResolved?.("terminal");
         navigateAfterSave(options);
         return;
       }
       if (receiveCashuToken === null) {
         setStatus(`${t("errorPrefix")}: Cashu storage is not ready`);
+        options?.onResolved?.("transient");
         return;
       }
       setCashuDraft("");
@@ -133,6 +142,15 @@ export const useSaveCashuFromText = ({
 
           if (Either.isLeft(outcome)) {
             const error = outcome.left;
+            // A token linkshu already holds, one whose proofs are spent, or an
+            // undecodable one can never succeed on retry; a mint that was
+            // unreachable or lock contention can. The caller uses this to stop
+            // (or keep) auto-retrying the message that carried the token.
+            const isTerminal =
+              error._tag === "TokenAlreadyKnown" ||
+              error._tag === "TokenAlreadySpent" ||
+              error._tag === "TokenParseFailed";
+            options?.onResolved?.(isTerminal ? "terminal" : "transient");
             if (error._tag === "TokenAlreadyKnown") {
               setStatus(t("cashuExists"));
               navigateAfterSave(options);
@@ -146,6 +164,7 @@ export const useSaveCashuFromText = ({
 
           const receipt = outcome.right;
           rememberCashuTokenKnown(tokenRaw, receipt.tokenText);
+          options?.onResolved?.("terminal");
 
           const cleanedMint = receipt.mint.trim().replace(/\/+$/, "");
           if (cleanedMint && !isMintDeleted(cleanedMint)) {
@@ -195,6 +214,7 @@ export const useSaveCashuFromText = ({
           const message = getUnknownErrorMessage(error, "Accept failed");
           logFailure(message);
           setStatus(`${t("cashuAcceptFailed")}: ${message}`);
+          options?.onResolved?.("transient");
         } finally {
           setCashuIsBusy(false);
         }

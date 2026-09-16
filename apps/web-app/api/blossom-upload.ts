@@ -90,8 +90,10 @@ export default async function handler(req: RequestLike, res: ResponseLike) {
       body: copyToArrayBuffer(bytes),
     });
     const responseText = await response.text();
-    const contentType = response.headers.get("content-type");
-    if (contentType) res.setHeader("Content-Type", contentType);
+    // Blossom's descriptor is JSON; never reflect the upstream content type so
+    // a hostile response cannot render as a document on the app origin.
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.setHeader("X-Content-Type-Options", "nosniff");
     res.status(response.status).send(responseText);
   } catch {
     res.status(502).json({ error: "Blossom upload failed" });

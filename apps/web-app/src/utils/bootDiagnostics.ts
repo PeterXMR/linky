@@ -1,5 +1,10 @@
+import { Schema } from "effect";
+import { JsonValue } from "../types/json";
+import {
+  redactDiagnosticText,
+  stringifyDiagnosticValue,
+} from "./bootDiagnosticRedaction";
 import { getUnknownErrorMessage } from "./unknown";
-import { redactDiagnosticText } from "./redactText";
 
 // index.html moves `current` to `previous` before this module loads, so the
 // previous attempt survives even a reload whose bundle never starts.
@@ -107,8 +112,10 @@ const serializeError = (
     getUnknownErrorMessage(error, "Unknown boot error"),
   ),
   name:
-    error instanceof Error || error instanceof DOMException ? error.name : null,
-  source,
+    error instanceof Error || error instanceof DOMException
+      ? redactDiagnosticText(error.name)
+      : null,
+  source: redactDiagnosticText(source),
   stack:
     error instanceof Error && error.stack
       ? redactDiagnosticText(error.stack)
@@ -119,7 +126,7 @@ const persistSnapshot = (): void => {
   try {
     sessionStorage.setItem(
       CURRENT_BOOT_DIAGNOSTICS_KEY,
-      JSON.stringify(snapshot),
+      stringifyDiagnosticValue(snapshot),
     );
   } catch {
     // Diagnostics still remain available in memory.
@@ -136,9 +143,18 @@ const readPreviousAttempt = (): unknown => {
   try {
     const stored = sessionStorage.getItem(PREVIOUS_BOOT_DIAGNOSTICS_KEY);
     if (stored === null) return null;
-    const parsed: unknown = JSON.parse(stored);
-    return parsed;
+    const parsed = Schema.decodeUnknownSync(Schema.parseJson(JsonValue))(
+      stored,
+    );
+    const sanitized = stringifyDiagnosticValue(parsed);
+    sessionStorage.setItem(PREVIOUS_BOOT_DIAGNOSTICS_KEY, sanitized);
+    return Schema.decodeUnknownSync(Schema.parseJson(JsonValue))(sanitized);
   } catch {
+    try {
+      sessionStorage.removeItem(PREVIOUS_BOOT_DIAGNOSTICS_KEY);
+    } catch {
+      // Storage may be unavailable.
+    }
     return null;
   }
 };
@@ -157,11 +173,11 @@ const collectEnvironmentDiagnostics = (): BootEnvironmentDiagnostics => ({
     serviceWorker: "serviceWorker" in navigator,
     worker: typeof Worker !== "undefined",
   },
-  language: navigator.language,
+  language: redactDiagnosticText(navigator.language),
   online: typeof navigator.onLine === "boolean" ? navigator.onLine : null,
   page: {
     origin: location.origin,
-    pathname: location.pathname,
+    pathname: redactDiagnosticText(location.pathname),
   },
   screen: {
     devicePixelRatio,
@@ -171,7 +187,7 @@ const collectEnvironmentDiagnostics = (): BootEnvironmentDiagnostics => ({
     width: screen.width,
   },
   secureContext: typeof isSecureContext === "boolean" ? isSecureContext : null,
-  userAgent: navigator.userAgent,
+  userAgent: redactDiagnosticText(navigator.userAgent),
 });
 
 const runWithTimeout = async <T>(
@@ -213,14 +229,14 @@ const collectStorageDiagnostics = async (): Promise<BootStorageDiagnostics> => {
       : null;
 
   return {
-    cacheNames,
+    cacheNames: cacheNames?.map(redactDiagnosticText) ?? null,
     persisted,
     quotaBytes: estimate.quota ?? null,
     serviceWorkers:
       registrations?.map((registration) => ({
         active: registration.active?.state ?? null,
         installing: registration.installing?.state ?? null,
-        scope: registration.scope,
+        scope: redactDiagnosticText(registration.scope),
         waiting: registration.waiting?.state ?? null,
       })) ?? null,
     usageBytes: estimate.usage ?? null,
@@ -228,13 +244,13 @@ const collectStorageDiagnostics = async (): Promise<BootStorageDiagnostics> => {
 };
 
 export const recordBootStage = (stage: string): void => {
-  snapshot.currentStage = stage;
+  snapshot.currentStage = redactDiagnosticText(stage);
   appendEvent({
     at: new Date().toISOString(),
     elapsedMs: Math.max(0, Date.now() - startedAtMs),
     error: null,
     kind: "stage",
-    stage,
+    stage: snapshot.currentStage,
   });
 };
 
@@ -272,7 +288,7 @@ export const collectBootDiagnostics =
 
 export const downloadBootDiagnostics = async (): Promise<void> => {
   const report = await collectBootDiagnostics();
-  const blob = new Blob([JSON.stringify(report, null, 2)], {
+  const blob = new Blob([stringifyDiagnosticValue(report)], {
     type: "application/json;charset=utf-8",
   });
   const url = URL.createObjectURL(blob);
@@ -285,4 +301,5 @@ export const downloadBootDiagnostics = async (): Promise<void> => {
   globalThis.setTimeout(() => URL.revokeObjectURL(url), 1_000);
 };
 
+readPreviousAttempt();
 recordBootStage("module-loaded");

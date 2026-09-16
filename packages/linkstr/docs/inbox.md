@@ -69,6 +69,8 @@ const describe = (event: WrapInboxEvent): string =>
 
 A `switch (event._tag)` works the same way. Use `Match.tagsExhaustive` when you want the compiler to force a branch per tag. The web app's single consumer, `apps/web-app/src/app/hooks/messages/useLinkstrInboxSync.ts`, is a `switch` with grouped `case`s that hands each vertical to its own module; the React wiring is in [react.md](./react.md#inbox).
 
+Rumors with timestamps more than five minutes ahead of the receiving clock are dropped. Older history has no age cutoff. Envelope timestamps remain randomized according to NIP-59 and are not subject to that rumor limit. The outer signature is checked before decryption, followed by seal authentication and rumor hash verification.
+
 ## `WrapDropped`
 
 A wrap the inbox chose not to surface, with `wrapId` (null when the outer event was malformed) and a `reason`:
@@ -77,6 +79,8 @@ A wrap the inbox chose not to surface, with `wrapId` (null when the outer event 
 | ------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
 | `malformed-wrap`                                                                      | not a valid signed kind-1059 event                           |
 | `not-addressed-to-me`                                                                 | no `p` tag with our pubkey                                   |
+| `invalid-wrap`                                                                        | outer signature verification failed                          |
+| `invalid-rumor-timestamp`                                                             | rumor timestamp is more than five minutes in the future      |
 | `unwrap-failed`                                                                       | decryption failed                                            |
 | `invalid-seal`                                                                        | seal does not decode or its signature fails                  |
 | `sender-forged`                                                                       | rumor author ≠ seal author, or equals the ephemeral wrap key |
@@ -113,7 +117,7 @@ const cursorStoreFor = (pubkey: Pubkey) =>
 
 ## `fetchWrapEvent` for notification opens
 
-A push payload names a wrap by id and lists relay hints ([push-inbox.md](./push-inbox.md)). Validate the id first; it came over the network.
+A push payload names a wrap by id ([push-inbox.md](./push-inbox.md)). Validate the id first; it came over the network. Fetch from configured read relays only; ignore sender-provided relay hints, including those in older push payloads.
 
 ```ts
 import { Effect, Schema } from "effect";
@@ -132,14 +136,12 @@ const decodePushed = (
   secretKey: NostrSecretKey,
   readRelays: ReadonlyArray<RelayUrl>,
   outerEventId: string,
-  relayHints: ReadonlyArray<RelayUrl>,
 ): Promise<WrapInboxEvent | null> => {
   if (!isWrapId(outerEventId)) return Promise.resolve(null);
   return runLinkstr(
     { secretKey, readRelays },
     Effect.flatMap(WrapInbox, (inbox) =>
       inbox.fetchWrapEvent(outerEventId, {
-        extraRelays: relayHints,
         timeout: "8 seconds",
       }),
     ).pipe(

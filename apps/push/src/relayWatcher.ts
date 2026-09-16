@@ -49,6 +49,8 @@ export class RelayWatcher {
     this.subscription = watchPushInbox(
       {
         readRelays: this.relayUrls,
+        allowInsecureLocalhost:
+          process.env.PUSH_ALLOW_INSECURE_LOCALHOST_RELAYS === "1",
         lookbackSeconds: CATCH_UP_LOOKBACK_SECONDS,
         onInvalidWrap: (failure) =>
           console.warn(`[push] invalid push wrap failure=${failure}`),
@@ -122,7 +124,6 @@ export class RelayWatcher {
       recipientPubkey: recipient,
       recipientNpub: encodeNpub(recipient),
       createdAt: wrap.createdAt,
-      relayHints: [...wrap.relayHints],
     };
     const deliveries: Array<Promise<void>> = [];
 
@@ -133,7 +134,7 @@ export class RelayWatcher {
           .catch((error) => {
             console.warn(
               `[push] failed to deliver ${wrap.wrapId} to ${recipient}`,
-              error,
+              error instanceof Error ? error.message : "Unknown delivery error",
             );
           }),
       );

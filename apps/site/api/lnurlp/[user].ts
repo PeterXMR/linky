@@ -53,7 +53,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         ? rewriteLnurlCallback(proxyResult.text, getPublicOrigin(req), user)
         : proxyResult.text,
     });
-  } catch (error) {
-    sendProxyFailure(res, error);
+  } catch {
+    sendProxyFailure(res);
   }
 }

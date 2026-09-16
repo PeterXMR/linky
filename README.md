@@ -30,6 +30,7 @@ The repo also contains a separate public website in `apps/site/` intended for `l
     - cashu (`cashu-n`)
     - messages (`messages-n`)
     - owner metadata (`ownerMeta`)
+- Seed backup uses the browser credential API where supported. Otherwise, use Show/Copy in Master keys and save the seed manually. Linky does not submit the seed to a server to trigger password saving.
 - If user pastes custom `nsec` during a SLIP-39 session, app switches to pasted key locally without immediate Evolu restore/write; choosing Derive switches back to seed-derived key.
 
 ## Owner rotation and limits
@@ -68,7 +69,7 @@ For Android native builds: Java 17
 - `bun run dev` — full local environment: starts `docker-compose.dev.yml` (local Nostr relay :7777, Evolu sync relay :4001, Cashu Nutshell **FakeWallet** mint :3338 that auto-settles invoices with fake sats), then runs the web app (:5173) and push service (:8787) against it via the committed `.env.development` files. npub.cash flows are disabled locally (#219); the mint has no real Lightning backend (#220).
 - `bun run dev:prod` — web app only, on :5175, against production services. The separate port keeps browser storage isolated from local-dev sessions.
 - `bun run dev:services` — just the docker stack, attached.
-- The `e2e` and `quota` Compose profiles also start an isolated Evolu relay on :4002 with a 16 KiB per-owner quota for recovery tests. The normal :4001 relay stays unlimited unless `EVOLU_OWNER_QUOTA_BYTES` sets a positive byte limit.
+- The `e2e` and `quota` Compose profiles also start an isolated Evolu relay on :4002 with a 16 KiB per-owner quota for recovery tests. The normal :4001 development relay explicitly stays unlimited unless `EVOLU_OWNER_QUOTA_BYTES` sets a positive byte limit. The standalone image defaults to 100 MiB per owner; see [relay configuration](docker/evolu-relay/README.md).
 
 ### Local error tracker
 
@@ -192,8 +193,9 @@ they are part of `bun run test`.
 End-to-end tests (Playwright) live in `apps/web-app/tests/*.spec.ts`.
 The `local-stack` runs the proxy-payment flow — three accounts on one machine, talking over the local
 Nostr relay and paying each other with the local Cashu mint — plus the linkshu storage-migration
-scenario, chat/edit/offline-reaction and top-up recovery, and signup with a real password-save
-form submission. Attachment tests send encrypted images and PDFs between browsers and verify
+scenario, chat/edit/offline-reaction and top-up recovery, and signup/manual password saving
+with checks that recovery seeds stay out of HTTP requests. Attachment tests send encrypted
+images and PDFs between browsers and verify
 decryption, seen receipts, downloads, and bytes handed to the browser sharing API. Owner-lane
 tests verify old and new contacts, messages, transactions, and tokens across devices and reloads.
 Boot and route tests cover fresh profiles, restore, unavailable browser storage, and navigation.

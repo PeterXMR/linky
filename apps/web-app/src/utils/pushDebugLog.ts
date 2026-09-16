@@ -1,7 +1,7 @@
 import { Option, Schema } from "effect";
 import { isRecord } from "./unknown";
 import type { JsonRecord, JsonValue } from "../types/json";
-import { redactDiagnosticText } from "./redactText";
+import { redactDiagnosticText } from "./bootDiagnosticRedaction";
 import { sleep } from "./time";
 
 const PUSH_DEBUG_CACHE_NAME = "linky-push-debug-v1";

@@ -6,12 +6,11 @@ const SW_BUILD_TAG = "linky-sw-2026-08-14T00:00-linkstr-wrap-fetch";
 const NOTIFICATION_OPEN_URL = "/#contacts";
 const NOTIFICATION_OPEN_HASH_PARAM = "notificationOpen";
 
+import { describePushNotificationTitle } from "./utils/pushNotificationTitle";
 import { getUnknownErrorMessage, isRecord } from "./utils/unknown";
 import {
-  encodeNpub,
   identityFromNsec,
   NostrSecretKey,
-  parsePubkey,
   RelayUrl,
   runLinkstr,
   WrapId,
@@ -31,7 +30,10 @@ import {
   getChatAttachmentCopyForLanguage,
   getReceivedMoneyCopyForLanguage,
 } from "./app/lib/cashuNotificationCopy";
-import { NOSTR_RELAYS } from "./utils/nostrRelays";
+import {
+  NOSTR_RELAYS,
+  ALLOW_INSECURE_LOCALHOST_RELAYS,
+} from "./utils/nostrRelays";
 import { getStoredPushContactName } from "./utils/pushContactNamesStorage";
 import {
   appendPushDebugLog,
@@ -39,7 +41,6 @@ import {
   flushPushDebugLog,
 } from "./utils/pushDebugLog";
 import { getStoredPushNsec } from "./utils/pushNsecStorage";
-import { formatShortNpub } from "./utils/formatting";
 
 declare const self: ServiceWorkerGlobalScope;
 
@@ -55,7 +56,6 @@ type PushNotificationData = {
   outerEventId?: string;
   recipientNpub?: string;
   recipientPubkey?: string;
-  relayHints?: string[];
   senderPubkey?: string;
   type?: string;
 };
@@ -71,13 +71,6 @@ interface DecryptedPushMessage {
   isCashu: boolean;
   isPaymentNotice: boolean;
   senderPub: string;
-}
-
-type NotificationTitleKind = "contact" | "sender" | "recipient" | "fallback";
-
-interface NotificationTitle {
-  kind: NotificationTitleKind;
-  title: string;
 }
 
 function readPushNotificationData(value: unknown): PushNotificationData {
@@ -98,14 +91,6 @@ function readPushNotificationData(value: unknown): PushNotificationData {
     ...(typeof value.recipientPubkey === "string" &&
     value.recipientPubkey.trim()
       ? { recipientPubkey: value.recipientPubkey }
-      : {}),
-    ...(Array.isArray(value.relayHints)
-      ? {
-          relayHints: value.relayHints.filter(
-            (entry): entry is string =>
-              typeof entry === "string" && entry.trim().length > 0,
-          ),
-        }
       : {}),
     ...(typeof value.senderPubkey === "string" && value.senderPubkey.trim()
       ? { senderPubkey: value.senderPubkey }
@@ -187,57 +172,17 @@ function truncateNotificationBody(value: string): string {
   return `${normalized.slice(0, 140)}…`;
 }
 
-function formatNotificationPeerLabel(pubkeyHex: string): string {
-  const normalized = pubkeyHex.trim();
-  if (!normalized) return "";
-
-  const pubkey = parsePubkey(normalized);
-  return formatShortNpub(pubkey ? encodeNpub(pubkey) : normalized);
-}
-
-function buildNotificationTitle(
-  envelope: PushNotificationEnvelope,
-  decryptedMessage: DecryptedPushMessage | null,
-  senderContactName: string | null,
-): NotificationTitle {
-  const contactName = (senderContactName ?? "").trim();
-  if (contactName) return { kind: "contact", title: `Linky - ${contactName}` };
-
-  const senderLabel = decryptedMessage
-    ? formatNotificationPeerLabel(decryptedMessage.senderPub)
-    : "";
-  if (senderLabel) return { kind: "sender", title: `Linky - ${senderLabel}` };
-
-  const recipientLabel = formatShortNpub(
-    envelope.data?.recipientNpub ?? envelope.data?.recipientPubkey ?? "",
-  );
-  return recipientLabel
-    ? { kind: "recipient", title: `Linky - ${recipientLabel}` }
-    : { kind: "fallback", title: envelope.title ?? "Linky" };
-}
-
-function sanitizeSpaydFilename(value: string): string {
-  return value.replace(/[^a-zA-Z0-9._-]/g, "_");
-}
-
 function createSpaydResponse(url: URL): Response {
   const payload = url.searchParams.get("data") || "";
-  const type =
-    url.searchParams.get("type") || "application/x-shortpaymentdescriptor";
-  const filename = sanitizeSpaydFilename(
-    url.searchParams.get("filename") || "platba.spayd",
-  );
-  const disposition =
-    url.searchParams.get("disposition") === "attachment"
-      ? "attachment"
-      : "inline";
 
   return new Response(payload, {
     status: 200,
     headers: {
       "Cache-Control": "no-store",
-      "Content-Disposition": `${disposition}; filename="${filename}"`,
-      "Content-Type": `${type}; charset=utf-8`,
+      "Content-Disposition": 'inline; filename="platba.spayd"',
+      "Content-Type": "application/x-shortpaymentdescriptor; charset=utf-8",
+      "Content-Security-Policy": "default-src 'none'; sandbox allow-downloads",
+      "X-Content-Type-Options": "nosniff",
     },
   });
 }
@@ -255,9 +200,7 @@ async function fetchWrapInboxEvent(
   }
 
   const readRelays = NOSTR_RELAYS.filter(isRelayUrl);
-  const extraRelays = (envelope.data?.relayHints ?? []).filter(isRelayUrl);
-  const relays = Array.from(new Set([...readRelays, ...extraRelays]));
-  if (relays.length === 0) {
+  if (readRelays.length === 0) {
     logSw("sw decrypt fetch skipped because no relays were available", {
       data: envelope.data ?? {},
     });
@@ -266,16 +209,19 @@ async function fetchWrapInboxEvent(
 
   logSw("sw decrypt fetching outer wrap", {
     data: envelope.data ?? {},
-    relayCount: relays.length,
-    relays,
+    relayCount: readRelays.length,
+    relays: readRelays,
   });
 
   try {
     const event = await runLinkstr(
-      { secretKey, readRelays },
+      {
+        secretKey,
+        readRelays,
+        allowInsecureLocalhost: ALLOW_INSECURE_LOCALHOST_RELAYS,
+      },
       Effect.flatMap(WrapInbox, (inbox) =>
         inbox.fetchWrapEvent(outerEventId, {
-          extraRelays,
           timeout: WRAP_FETCH_TIMEOUT_MS,
         }),
       ),
@@ -442,18 +388,15 @@ registerRoute(
 );
 
 registerRoute(
-  ({ url }) => url.pathname.endsWith("/platba.spayd"),
+  ({ url }) =>
+    url.origin === self.location.origin && url.pathname === "/platba.spayd",
   async ({ url }) => createSpaydResponse(url),
 );
 
 registerRoute(
   new NavigationRoute(createHandlerBoundToURL("index.html"), {
     // Dev inspector page and collector endpoints must reach the dev server.
-    denylist: [
-      /^\/password-save\.html$/,
-      /^\/inspector\.html/,
-      /^\/__inspector\//,
-    ],
+    denylist: [/^\/inspector\.html/, /^\/__inspector\//],
   }),
 );
 
@@ -580,11 +523,13 @@ self.addEventListener("push", (event) => {
             () => null,
           )
         : null;
-      const notificationTitle = buildNotificationTitle(
-        envelope,
-        decryptedMessage,
-        senderContactName,
-      );
+      const notificationTitle = describePushNotificationTitle({
+        contactName: senderContactName,
+        senderPubkey: decryptedMessage?.senderPub,
+        recipientIdentifier:
+          envelope.data?.recipientNpub ?? envelope.data?.recipientPubkey,
+        title: envelope.title,
+      });
       const options: NotificationOptions = {
         badge: "/pwa-192x192.png",
         body: notificationBody,

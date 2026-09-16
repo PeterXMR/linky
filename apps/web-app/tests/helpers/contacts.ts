@@ -12,7 +12,11 @@ export const addContactByNpub = async (
   npub: string,
 ): Promise<string> => {
   await page.goto("/#contacts");
-  await page.locator("[data-guide='contact-add-button']").first().click();
+  const addButton = page.locator("[data-guide='contact-add-button']").first();
+  await expect(addButton).toBeVisible();
+  const cards = page.locator("[data-guide='contact-card']");
+  const previousCount = await cards.count();
+  await addButton.click();
   await page.waitForURL(/#contact\/new$/, { timeout: 20_000 });
 
   const searchInput = page.locator("[data-guide='contact-search-input']");
@@ -25,10 +29,7 @@ export const addContactByNpub = async (
   });
   await page.waitForURL(/#(?:contacts)?$/, { timeout: 20_000 });
 
-  const cards = page.locator("[data-guide='contact-card']");
-  await expect
-    .poll(() => cards.count(), { timeout: 20_000 })
-    .toBeGreaterThan(0);
+  await expect(cards).toHaveCount(previousCount + 1, { timeout: 20_000 });
   await cards.first().click();
   await page.waitForURL(/#chat\/[^/]+$/, { timeout: 20_000 });
 

@@ -1,7 +1,7 @@
 {
   "name": "@linky/web-app",
   "private": true,
-  "version": "26.9.16",
+  "version": "26.9.17",
   "license": "0BSD",
   "type": "module",
   "scripts": {
@@ -43,6 +43,7 @@
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "slip39-ts": "^0.1.13",
+    "undici": "^7.22.0",
     "workbox-expiration": "^7.3.0",
     "workbox-precaching": "^7.3.0",
     "workbox-routing": "^7.3.0",

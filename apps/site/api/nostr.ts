@@ -17,7 +17,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     }
 
     sendPublicProxyResult(res, await safeFetch(targetUrl));
-  } catch (error) {
-    sendProxyFailure(res, error);
+  } catch {
+    sendProxyFailure(res);
   }
 }
