@@ -145,7 +145,9 @@ describe("lnurlp handler", () => {
 
     expect(sent.status).toBe(200);
     expect(JSON.parse(sent.body)).toEqual({ pr: "lnbc1..." });
-    expect(sent.headers["Content-Type"]).toBe("application/json");
+    expect(sent.headers["Content-Type"]).toBe(
+      "application/json; charset=utf-8",
+    );
     expect(undiciFetch.mock.calls.map(([url]) => url.href)).toEqual([
       "https://pay.example.com/.well-known/lnurlp/alice",
       "https://pay.example.com/cb?amount=21000&comment=thanks",

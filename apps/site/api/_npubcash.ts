@@ -63,9 +63,11 @@ export const sendProxyResult = (
   result: SafeFetchResult,
 ): void => {
   res.setHeader("Cache-Control", "no-store");
-  if (result.contentType) {
-    res.setHeader("Content-Type", result.contentType);
-  }
+  // The proxied payloads are JSON; never reflect the upstream content type, or a
+  // hostile upstream returning text/html would run as a document on our origin
+  // (reflected XSS).
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.setHeader("X-Content-Type-Options", "nosniff");
   res.status(result.status).send(result.text);
 };
 

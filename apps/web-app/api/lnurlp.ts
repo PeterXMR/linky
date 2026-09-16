@@ -1,42 +1,14 @@
-const FETCH_TIMEOUT_MS = 8_000;
-const MAX_RESPONSE_BYTES = 512_000;
+import { isAllowedTarget, safeFetch } from "./_safeFetch.js";
 
-const isSafeUrl = (value: string): boolean => {
-  if (!value) return false;
-  if (!/^https?:\/\//i.test(value)) return false;
-  if (value.length > 2000) return false;
-  return true;
-};
-
-const readResponseText = async (response: Response): Promise<string> => {
-  const declaredLength = Number(response.headers.get("content-length") ?? 0);
-  if (declaredLength > MAX_RESPONSE_BYTES) {
-    throw new Error("Proxy response is too large");
+const parseTarget = (raw: string | string[] | undefined): URL | null => {
+  const value = (Array.isArray(raw) ? raw[0] : raw)?.trim();
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return isAllowedTarget(url) ? url : null;
+  } catch {
+    return null;
   }
-
-  const reader = response.body?.getReader();
-  if (!reader) return response.text();
-
-  const chunks: Uint8Array[] = [];
-  let length = 0;
-  while (true) {
-    const chunk = await reader.read();
-    if (chunk.done) break;
-    length += chunk.value.byteLength;
-    if (length > MAX_RESPONSE_BYTES) {
-      await reader.cancel();
-      throw new Error("Proxy response is too large");
-    }
-    chunks.push(chunk.value);
-  }
-
-  const bytes = new Uint8Array(length);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return new TextDecoder().decode(bytes);
 };
 
 export default async function handler(
@@ -49,44 +21,24 @@ export default async function handler(
     setHeader: (name: string, value: string) => void;
   },
 ) {
+  const target = parseTarget(req.query?.url);
+  if (!target) {
+    res.status(400).json({ error: "Invalid url" });
+    return;
+  }
+
   try {
-    const raw = Array.isArray(req.query?.url)
-      ? req.query.url[0]
-      : req.query?.url;
-    const target = String(raw ?? "").trim();
-
-    if (!isSafeUrl(target)) {
-      res.status(400).json({ error: "Invalid url" });
-      return;
-    }
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-    let response: Response;
-    let text: string;
-    try {
-      response = await fetch(target, {
-        method: "GET",
-        headers: {
-          Accept: "application/json",
-        },
-        signal: controller.signal,
-      });
-      text = await readResponseText(response);
-    } finally {
-      clearTimeout(timeout);
-    }
-    const contentType = response.headers.get("content-type");
-
-    res.setHeader("Access-Control-Allow-Origin", "*");
+    // Fetch through the hardened guard (https-only, no ports/creds, public-IP
+    // check, pinned connect, redirect re-validation). The response is always
+    // served as JSON with nosniff and no open CORS: reflecting the upstream
+    // content type turned this into reflected XSS on the app origin, and the
+    // lack of an egress guard made it an open SSRF proxy.
+    const result = await safeFetch(target);
     res.setHeader("Cache-Control", "no-store");
-    if (contentType) res.setHeader("Content-Type", contentType);
-
-    res.status(response.status).send(text);
-  } catch (error) {
-    res.status(502).json({
-      error: "Proxy fetch failed",
-      detail: String(error ?? "unknown"),
-    });
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.status(result.status).send(result.text);
+  } catch {
+    res.status(502).json({ error: "Proxy fetch failed" });
   }
 }
