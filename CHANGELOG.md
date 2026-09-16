@@ -12,6 +12,20 @@ používá také v Google Play a musí se vejít do 500 znaků na jazyk.
 
 ## [Unreleased]
 
+## [26.9.17] - 2026-09-16
+
+### en-US
+
+- Saving recovery seeds to a password manager no longer sends them to Linky's server.
+- Improved security when opening payment-file URLs.
+- Disabled Android app backups.
+
+### cs-CZ
+
+- Ukládání obnovovací fráze do správce hesel ji už neposílá na server Linky.
+- Zvýšené zabezpečení při otevírání odkazů na platební soubory.
+- Vypnuté zálohování aplikace v Androidu.
+
 ## [26.9.16] - 2026-09-14
 
 ### en-US
