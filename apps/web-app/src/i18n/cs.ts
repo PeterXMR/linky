@@ -158,6 +158,8 @@ export const cs = {
   bankPaymentOfferStaggerDelayIncrease: "Prodloužit prodlevu",
   custom: "Vlastní",
   restore: "Obnovit",
+  claimOwnLightningAddressInvoiceInvalid:
+    "Neplatná nebo vypršená platební faktura",
   claimOwnLightningAddressPurchase: "Koupit",
   claimOwnLightningAddressPurchaseFor: "Koupit za {amount}",
   claimOwnLightningAddressPurchasing: "Kupuji...",
@@ -208,6 +210,7 @@ export const cs = {
   nostrRelay: "Nostr relay",
   evoluServer: "Evolu server",
   addRelay: "Přidat relay",
+  invalidRelayUrl: "Zadejte zabezpečenou WebSocket adresu relay (wss://).",
   relayUrl: "Relay URL",
   relayStatusLabel: "Stav",
   relayStateConnected: "Připojeno",
@@ -858,6 +861,8 @@ export const cs = {
   paymentRequestPreviewOutgoing: "Žádáte o {amount}",
   paymentRequestDeclinedPreviewIncoming: "Žádost o platbu odmítnuta",
   paymentRequestDeclinedPreviewOutgoing: "Odmítli jste žádost o platbu",
+  paymentRequestChanged:
+    "Požadavek se změnil. Požádejte o nový platební požadavek.",
   paymentRequestStatusRequested: "Požadováno",
   paymentRequestStatusPaid: "Zaplaceno",
   paymentRequestStatusDeclined: "Odmítnuto",
@@ -897,6 +902,8 @@ export const cs = {
   lightningInvoiceConfirmUnknownAmount: "Neznámá částka",
   payPaying: "Platím…",
   payQueuedMessage: "Platba čeká: {amount} {unit} → {name}.",
+  payApprovalChanged:
+    "Schválení platby již není platné. Zkontrolujte příjemce a zaplaťte znovu.",
   payFailed: "Platba se nepovedla",
   payPending:
     "Platba čeká na potvrzení mintem. Dokončí se sama, jakmile mint odpoví.",

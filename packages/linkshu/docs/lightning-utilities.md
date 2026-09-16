@@ -42,6 +42,10 @@ const invoiceFor = async (target: string, amountSat: number) => {
 
 These are permissive by design: they decode fields for display and never verify the signature or authorize a payment.
 
+## Fixed-amount invoice decoding
+
+`getPayableLightningInvoice(raw)` returns `PayableLightningInvoice | null`. It uses `light-bolt11-decoder` for checksum-checked decoding, rejects missing or non-positive amounts, requires a payment hash and a correctly sized signature field, and bounds input to 5,000 characters. `amountSat` is rounded up from whole millisatoshis; `expiresAtSec` includes the default one-hour expiry. Both fields are non-null. The caller must compare expiry with the current time and check balance immediately before payment. This decodes invoice fields; the mint still validates the signature and payment feasibility.
+
 ## Amount fallback (`invoice/paymentAmountFallback.ts`)
 
 For LNURL targets, the app can re-fetch the invoice at a lower amount when the requested amount plus fees does not fit the balance. The package supplies the ladder; the retry loop stays app-side (`useLightningPaymentsDomain.ts`).
@@ -69,6 +73,8 @@ These work on error _messages_. `Melt` itself fails with a typed `InsufficientFu
 | `LnurlTagMismatchError`                                                     | thrown when the server's `tag` is not the expected one                                                                 |
 
 `fallback: LnurlFallback = (url) => Promise<Response>` is tried when the direct fetch fails — Linky routes through its `/api/lnurlp` proxy for CORS-blocked servers (`apps/web-app/src/lnurlPay.ts`). Fixed-amount LNURLs that re-quote in fiat are followed within 2 % drift.
+
+All LNURL targets and pay/withdraw/auth callbacks require HTTPS, including bech32-encoded URLs. `lnurlp://`, `lnurlw://`, and `keyauth://` resolve to HTTPS. HTTP loopback URLs are rejected too; local LNURL providers need HTTPS. Redirects are followed manually, up to three hops, with HTTPS checked before each request. Browsers hide redirect destinations, so those requests use the optional fallback. Fallback adapters must enforce HTTPS on every upstream redirect as well. Invalid schemes fail before the fallback is called, and an insecure auth preview fails before signing.
 
 ### LNURL-withdraw
 

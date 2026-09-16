@@ -161,6 +161,8 @@ export const de = {
   bankPaymentOfferStaggerDelayIncrease: "Verzögerung erhöhen",
   custom: "Benutzerdefiniert",
   restore: "Wiederherstellen",
+  claimOwnLightningAddressInvoiceInvalid:
+    "Ungültige oder abgelaufene Zahlungsrechnung",
   claimOwnLightningAddressPurchase: "Kaufen",
   claimOwnLightningAddressPurchaseFor: "Für {amount} kaufen",
   claimOwnLightningAddressPurchasing: "Wird gekauft…",
@@ -212,6 +214,7 @@ export const de = {
   nostrRelay: "Nostr-Relay",
   evoluServer: "Evolu-Server",
   addRelay: "Relay hinzufügen",
+  invalidRelayUrl: "Gib eine sichere WebSocket-Relay-URL ein (wss://).",
   relayUrl: "Relay-URL",
   relayStatusLabel: "Status",
   relayStateConnected: "Verbunden",
@@ -859,6 +862,8 @@ export const de = {
   paymentRequestDeclinedPreviewIncoming: "Zahlungsanforderung abgelehnt",
   paymentRequestDeclinedPreviewOutgoing:
     "Du hast die Zahlungsanforderung abgelehnt",
+  paymentRequestChanged:
+    "Diese Anfrage wurde geändert. Bitte den Absender um eine neue Zahlungsanfrage.",
   paymentRequestStatusRequested: "Angefordert",
   paymentRequestStatusPaid: "Bezahlt",
   paymentRequestStatusDeclined: "Abgelehnt",
@@ -898,6 +903,8 @@ export const de = {
   lightningInvoiceConfirmUnknownAmount: "Unbekannter Betrag",
   payPaying: "Wird bezahlt…",
   payQueuedMessage: "Zahlung {amount} {unit} → {name} vorgemerkt.",
+  payApprovalChanged:
+    "Die Zahlungsfreigabe ist nicht mehr gültig. Prüfe den Empfänger und bezahle erneut.",
   payFailed: "Zahlung fehlgeschlagen",
   payPending:
     "Die Zahlung wartet auf die Bestätigung der Mint. Sie wird abgeschlossen, sobald die Mint antwortet.",

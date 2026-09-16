@@ -8,6 +8,7 @@ import { createHash } from "node:crypto";
 import * as webpush from "web-push";
 
 import { isRecord } from "./guards";
+import { sendWebPushRequest } from "./webPushTransport";
 import { hashSecret } from "./hashSecret";
 import { PushStorage } from "./storage";
 import type {
@@ -172,14 +173,16 @@ export class PushDeliveryService {
     };
 
     try {
-      await webpush.sendNotification(
-        toWebPushSubscription(subscription),
-        JSON.stringify(payload),
-        {
-          TTL: DELIVERY_TTL_SECONDS,
-          urgency: "normal",
-          topic: buildPushTopic(payloadData),
-        },
+      await sendWebPushRequest(
+        webpush.generateRequestDetails(
+          toWebPushSubscription(subscription),
+          JSON.stringify(payload),
+          {
+            TTL: DELIVERY_TTL_SECONDS,
+            urgency: "normal",
+            topic: buildPushTopic(payloadData),
+          },
+        ),
       );
       console.info(
         `[push] sent notification successfully id=${subscription.id} outerEventId=${payloadData.outerEventId} recipient=${payloadData.recipientPubkey} endpoint=${endpointHash} ttl=${DELIVERY_TTL_SECONDS}`,
@@ -198,7 +201,7 @@ export class PushDeliveryService {
         );
       }
       console.warn(
-        `[push] delivery failed ${payloadData.outerEventId} to ${payloadData.recipientPubkey} endpoint=${endpointHash} status=${statusCode ?? "unknown"} body=${errorBody ?? "n/a"}`,
+        `[push] delivery failed ${payloadData.outerEventId} to ${payloadData.recipientPubkey} endpoint=${endpointHash} status=${statusCode ?? "unknown"}`,
       );
       throw error;
     }
@@ -221,7 +224,6 @@ export class PushDeliveryService {
         outerEventId: payloadData.outerEventId,
         recipientNpub: payloadData.recipientNpub,
         recipientPubkey: payloadData.recipientPubkey,
-        relayHints: JSON.stringify(payloadData.relayHints),
         title: buildNotificationTitle(payloadData),
         type: payloadData.type,
       },

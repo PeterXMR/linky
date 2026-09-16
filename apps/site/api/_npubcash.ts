@@ -1,6 +1,8 @@
+import { Schema } from "effect";
 import type { SafeFetchResult } from "./_safeFetch.js";
 
 interface ApiRequest {
+  method?: string;
   query?: Record<string, string | string[] | undefined>;
   headers?: Record<string, string | string[] | undefined>;
 }
@@ -23,19 +25,29 @@ export const getFirstQueryValue = (
   return trimmed ? trimmed : null;
 };
 
-const isJsonObject = (value: unknown): value is Record<string, unknown> => {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-};
+const JsonObject = Schema.parseJson(
+  Schema.Record({ key: Schema.String, value: Schema.Unknown }),
+);
 
 export const parseJsonObject = (
   value: string,
 ): Record<string, unknown> | null => {
-  try {
-    const parsed: unknown = JSON.parse(value);
-    return isJsonObject(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
+  const parsed = Schema.decodeUnknownOption(JsonObject)(value);
+  return parsed._tag === "Some" ? parsed.value : null;
+};
+
+export const setJsonProxyHeaders = (res: ApiResponse): void => {
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Cache-Control", "no-store");
+};
+
+export const requireProxyGet = (req: ApiRequest, res: ApiResponse): boolean => {
+  setJsonProxyHeaders(res);
+  if (req.method === "GET") return true;
+  res.setHeader("Allow", "GET");
+  res.status(405).json({ error: "Method not allowed" });
+  return false;
 };
 
 export const getNpubcashBaseUrl = (): URL => {
@@ -62,11 +74,13 @@ export const sendProxyResult = (
   res: ApiResponse,
   result: SafeFetchResult,
 ): void => {
-  res.setHeader("Cache-Control", "no-store");
-  if (result.contentType) {
-    res.setHeader("Content-Type", result.contentType);
+  setJsonProxyHeaders(res);
+  const body = parseJsonObject(result.text);
+  if (!body) {
+    res.status(502).json({ error: "Upstream response is not a JSON object" });
+    return;
   }
-  res.status(result.status).send(result.text);
+  res.status(result.status).send(JSON.stringify(body));
 };
 
 export const sendPublicProxyResult = (
@@ -77,11 +91,8 @@ export const sendPublicProxyResult = (
   sendProxyResult(res, result);
 };
 
-export const sendProxyFailure = (res: ApiResponse, error: unknown): void => {
-  res.status(502).json({
-    error: "Proxy fetch failed",
-    detail: String(error ?? "unknown"),
-  });
+export const sendProxyFailure = (res: ApiResponse): void => {
+  res.status(502).json({ error: "Proxy fetch failed" });
 };
 
 export type { ApiRequest, ApiResponse };

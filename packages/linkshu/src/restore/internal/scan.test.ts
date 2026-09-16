@@ -178,6 +178,25 @@ describe("scanKeyset", () => {
     expect(scan).toEqual({ status: "skipped", detail });
   });
 
+  it.each([
+    "Couldn't verify keyset ID 01884a74bb2fc5ee",
+    "A short keyset ID v2 was encountered, but got no keysets to map it to.",
+    "Couldn't map short keyset ID 00ff to any known keysets of the current Mint",
+  ])(
+    "skips the keyset on the legacy verification failure %s",
+    async (detail) => {
+      const { input } = harness({
+        cursor: 0,
+        counter: 1,
+        restore: () => new MintRejected({ mint, code: null, detail }),
+      });
+
+      const scan = await Effect.runPromise(scanKeyset(input));
+
+      expect(scan).toEqual({ status: "skipped", detail });
+    },
+  );
+
   it("leaves the keyset untouched on a rejection without a NUT error code", async () => {
     const { input } = harness({
       cursor: 0,

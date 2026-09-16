@@ -512,7 +512,12 @@ export const useContactsMessagingComposition = ({
 
       const pubkey = decodeNpub(npub);
       if (!pubkey) continue;
-      records.push({ name, npub, pubkey });
+      records.push({
+        name,
+        npub,
+        pubkey,
+        nameSetByUser: contact.nameSetByUser === 1,
+      });
     }
 
     void setStoredPushContactNames(records);
@@ -2298,6 +2303,7 @@ export const useContactsMessagingComposition = ({
     mentionContacts,
     newRelayUrl,
     nostrBootstrapReady,
+    nostrMessagesLatestRef,
     nostrMessagesLocal,
     nostrMessagesRecent,
     nostrMetadataByNpub,

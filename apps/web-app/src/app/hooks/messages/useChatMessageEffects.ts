@@ -1,5 +1,9 @@
 import React from "react";
 import type { Route } from "../../../types/route";
+import {
+  isCashuAutoAcceptResolved,
+  markCashuAutoAcceptResolved,
+} from "../../lib/autoAcceptedCashuMessages";
 import { getLinkyBankPaymentOfferInfo } from "../../lib/bankPaymentOffer";
 import { parseCashuPaymentRequestMessage } from "../../lib/paymentRequestMessage";
 import { parsePrivateImageMessage } from "../../lib/privateImageMessage";
@@ -30,6 +34,7 @@ interface UseChatMessageEffectsParams<TContact extends ContactRowLike> {
       navigateToTokens?: boolean;
       navigateToWallet?: boolean;
       requestId?: string;
+      onResolved?: (resolution: "terminal" | "transient") => void;
     },
   ) => Promise<void>;
   selectedContact: TContact | null;
@@ -96,6 +101,7 @@ export const useChatMessageEffects = <TContact extends ContactRowLike>({
         const id = message.id;
         if (!id) continue;
         if (autoAcceptedChatMessageIdsRef.current.has(id)) continue;
+        if (isCashuAutoAcceptResolved(id)) continue;
         if (message.direction !== "in") continue;
 
         const content = message.content;
@@ -115,6 +121,9 @@ export const useChatMessageEffects = <TContact extends ContactRowLike>({
         void saveCashuFromText(info.tokenRaw, {
           ...(contactId ? { contactId } : {}),
           ...(requestId ? { requestId } : {}),
+          onResolved: (resolution) => {
+            if (resolution === "terminal") markCashuAutoAcceptResolved(id);
+          },
         });
         return;
       }

@@ -1,10 +1,10 @@
 /**
  * Proxy payment (bank payment offer) — happy path, three real app instances.
  *
- * A (offerer) scans a bank QR and offers it to two contacts. B accepts first
- * and wins the bank details; C accepts too and must end at accepted_by_other
- * without ever seeing them. B marks the bank payment paid, A confirms
- * settlement, and B receives sats.
+ * A (offerer) scans a bank QR and offers it to two contacts. B and C accept
+ * while A is offline. When A reconnects, exactly one receives bank details;
+ * the other ends at accepted_by_other without ever seeing them. The winner
+ * marks the bank payment paid, A confirms settlement, and the winner receives sats.
  *
  * Needs the docker stack up — see "E2E tests" in CLAUDE.md.
  *
@@ -12,12 +12,11 @@
  * lock and the sentCandidateKeys guard are dead code, so broadcasting the bank
  * details to every acceptor would keep a one-recipient test green.
  *
- * Not covered: induced failures (delivery ordering, multi-relay, resubscribe
- * bugs like 362313d), offer expiry (needs a Date.now seam), src/sw.ts
+ * Not covered: failed publishes, multi-relay delivery, offer expiry, src/sw.ts
  * (service workers are blocked below), multi-mint candidate ordering,
  * npub.cash flows, EUR/bysquare payloads.
  */
-import { createRequire } from "node:module";
+import jsQR from "jsqr";
 import {
   expect,
   test,
@@ -48,7 +47,7 @@ import {
   stubThirdPartyAssets,
 } from "./helpers/network";
 import { topUp } from "./helpers/wallet";
-import { waitForProfileStatusOnRelay } from "./helpers/relay";
+import { waitForProfileStatusOnRelay, watchNostrInbox } from "./helpers/relay";
 import {
   SPD_ACCOUNT,
   SPD_MESSAGE,
@@ -72,6 +71,7 @@ interface Account {
   identity: SeedIdentity;
   label: string;
   page: Page;
+  waitForInbox: () => Promise<void>;
 }
 
 const bootAccount = async (
@@ -89,6 +89,7 @@ const bootAccount = async (
 
   const page = await context.newPage();
   const errors = watchAppErrors(page, label);
+  const waitForInbox = watchNostrInbox(page, identity.npub);
 
   await setBaseStorage(page);
   await setSeedLoginStorage(page, identity);
@@ -100,7 +101,7 @@ const bootAccount = async (
   await expectNoBootErrorPanel(page, label);
   await expectSingleLoad(page, label);
 
-  return { context, errors, identity, label, page };
+  return { context, errors, identity, label, page, waitForInbox };
 };
 
 /** Publish the NIP-38 CZK status, then prove it actually landed on the relay. */
@@ -180,6 +181,10 @@ test("proxy payment: bank details reach exactly one acceptor, who is paid in sat
       await c.page.goto(`/#chat/${encodeURIComponent(chatAForC)}`);
     });
 
+    await test.step("all accounts finish inbox backfill", async () => {
+      await Promise.all(accounts.map((account) => account.waitForInbox()));
+    });
+
     const offerId =
       await test.step("A scans the bank QR and offers it", async () => {
         await a.page.goto("/#wallet");
@@ -224,7 +229,7 @@ test("proxy payment: bank details reach exactly one acceptor, who is paid in sat
         return decodeURIComponent(match[2]);
       });
 
-    await test.step("B accepts first, then C", async () => {
+    await test.step("B and C accept before A reconnects", async () => {
       // Both acceptors must be on the offer page before the first accept:
       // A's auto-responder terminates every other candidate the moment one
       // accept arrives, so an acceptor whose offer delivery lags the winner's
@@ -237,10 +242,21 @@ test("proxy payment: bank details reach exactly one acceptor, who is paid in sat
           { timeout: 120_000 },
         );
       }
-      for (const account of [b, c]) {
-        await account.page
-          .getByRole("button", { name: "Accept", exact: true })
-          .click();
+      // Let both acceptances reach the relay before A can close the loser's offer.
+      await a.context.setOffline(true);
+      try {
+        for (const account of [b, c]) {
+          await account.page
+            .getByRole("button", { name: "Accept", exact: true })
+            .click();
+          await expect(
+            account.page.getByText("Waiting for bank details.", {
+              exact: false,
+            }),
+          ).toBeVisible();
+        }
+      } finally {
+        await a.context.setOffline(false);
       }
     });
 
@@ -309,33 +325,31 @@ test("proxy payment: bank details reach exactly one acceptor, who is paid in sat
 
       // Decode the rendered QR to prove the payload survived
       // offerer -> relay -> acceptor -> re-render byte for byte.
-      await winner.page.addScriptTag({
-        path: createRequire(import.meta.url).resolve("jsqr"),
-      });
-      const decoded = await winner.page.evaluate(async () => {
+      const pixels = await winner.page.evaluate(async () => {
         const img = document.querySelector<HTMLImageElement>(
           "img.bank-payment-offer-qr",
         );
-        if (!img) return null;
+        if (!img) throw new Error("Payment QR image missing");
         await img.decode();
         const canvas = document.createElement("canvas");
         canvas.width = img.naturalWidth;
         canvas.height = img.naturalHeight;
         const ctx = canvas.getContext("2d");
-        if (!ctx) return null;
+        if (!ctx) throw new Error("Canvas context unavailable");
         ctx.drawImage(img, 0, 0);
         const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const decode: unknown = Reflect.get(window, "jsQR");
-        if (typeof decode !== "function") return null;
-        const result: unknown = decode(data.data, canvas.width, canvas.height);
-        return typeof result === "object" &&
-          result !== null &&
-          "data" in result &&
-          typeof result.data === "string"
-          ? result.data
-          : null;
+        return {
+          data: Array.from(data.data),
+          width: data.width,
+          height: data.height,
+        };
       });
-      expect(decoded).toBe(SPD_PAYLOAD);
+      const decoded = jsQR(
+        new Uint8ClampedArray(pixels.data),
+        pixels.width,
+        pixels.height,
+      );
+      expect(decoded?.data).toBe(SPD_PAYLOAD);
     });
 
     await test.step("the winner marks the bank payment paid", async () => {

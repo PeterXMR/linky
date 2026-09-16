@@ -1,3 +1,4 @@
+import { createContactNameFormatter } from "../utils/contactName";
 import { useMemoizedRouteBuilder } from "./hooks/composition/useMemoizedRouteBundle";
 import * as Evolu from "@evolu/common";
 import { useQuery } from "@evolu/react";
@@ -589,6 +590,7 @@ export const useAppShellComposition = ({
     mentionContacts,
     newRelayUrl,
     nostrBootstrapReady,
+    nostrMessagesLatestRef,
     nostrMessagesLocal,
     nostrMessagesRecent,
     nostrMetadataByNpub,
@@ -910,8 +912,10 @@ export const useAppShellComposition = ({
       chatMessages,
       contacts,
       enqueuePendingPayment,
+      bankPaymentOfferMessages,
       isBankPaymentOfferCanceled,
       nostrBootstrapReady,
+      nostrMessagesLatestRef,
       nostrMessagesLocal,
       nostrMessagesRecent,
       nostrPictureByNpub,
@@ -1114,6 +1118,11 @@ export const useAppShellComposition = ({
     ],
   );
 
+  const formatContactName = React.useMemo(
+    () => createContactNameFormatter(Array.from(displayContactById.values())),
+    [displayContactById],
+  );
+
   const renderContactCard = React.useCallback(
     (contact: DisplayContact) => {
       const npub = normalizeNpubIdentifier(contact.npub ?? "");
@@ -1132,6 +1141,7 @@ export const useAppShellComposition = ({
         <ContactCard
           key={contact.id ?? ""}
           contact={contact}
+          nameLabel={formatContactName(contact)}
           avatarUrl={avatarUrl}
           lastMessage={last ?? null}
           hasAttention={hasAttention}
@@ -1148,6 +1158,7 @@ export const useAppShellComposition = ({
       );
     },
     [
+      formatContactName,
       getCashuTokenMessageInfo,
       getMintIconUrl,
       getNpubMessageContactInfo,
@@ -1219,13 +1230,11 @@ export const useAppShellComposition = ({
   const saveSeedToPasswordManager =
     async (): Promise<PasswordManagerSaveResult> => {
       const password = (slip39Seed ?? "").trim();
-      const username = (effectiveProfileName ?? currentNpub ?? "").trim();
-      if (!password || !username) return "failed";
+      if (!password) return "failed";
 
       return triggerPasswordManagerSeedSave({
-        displayName: username,
+        displayName: effectiveProfileName ?? currentNpub ?? "",
         password,
-        username,
       });
     };
 
@@ -1681,11 +1690,6 @@ export const useAppShellComposition = ({
     advancedSettingsInput: {
       copyNostrKeys,
       copySeed,
-      passwordManagerSeedUsername: (
-        effectiveProfileName ??
-        currentNpub ??
-        ""
-      ).trim(),
       dedupeContacts,
       dedupeContactsIsBusy,
       defaultMintDisplay,

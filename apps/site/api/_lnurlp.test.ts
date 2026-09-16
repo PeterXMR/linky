@@ -12,7 +12,7 @@ const { lookup, undiciFetch } = vi.hoisted(() => ({
 
 vi.mock("node:dns", () => ({ promises: { lookup } }));
 
-vi.mock("undici", () => ({
+vi.mock("undici/index.js", () => ({
   Agent: class {
     close = async (): Promise<void> => {};
   },
@@ -28,7 +28,7 @@ interface Sent {
 const run = async (query: Record<string, string>): Promise<Sent> => {
   const sent: Sent = { status: 0, body: "", headers: {} };
   await handler(
-    { query },
+    { method: "GET", query },
     {
       setHeader: (name, value) => {
         sent.headers[name] = value;
@@ -102,10 +102,7 @@ describe("lnurlp handler", () => {
     const sent = await run({ address: "alice@127.0.0.1.nip.io" });
 
     expect(sent.status).toBe(502);
-    expect(JSON.parse(sent.body)).toMatchObject({
-      error: "Proxy fetch failed",
-      detail: expect.stringContaining("non-public"),
-    });
+    expect(JSON.parse(sent.body)).toEqual({ error: "Proxy fetch failed" });
     expect(lookup).toHaveBeenCalledWith("127.0.0.1.nip.io", { all: true });
     expect(undiciFetch).not.toHaveBeenCalled();
   });
@@ -145,7 +142,9 @@ describe("lnurlp handler", () => {
 
     expect(sent.status).toBe(200);
     expect(JSON.parse(sent.body)).toEqual({ pr: "lnbc1..." });
-    expect(sent.headers["Content-Type"]).toBe("application/json");
+    expect(sent.headers["Content-Type"]).toBe(
+      "application/json; charset=utf-8",
+    );
     expect(undiciFetch.mock.calls.map(([url]) => url.href)).toEqual([
       "https://pay.example.com/.well-known/lnurlp/alice",
       "https://pay.example.com/cb?amount=21000&comment=thanks",

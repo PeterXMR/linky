@@ -21,7 +21,6 @@ export interface AdvancedSettingsContextValue {
   importDataFileInputRef: React.RefObject<HTMLInputElement | null>;
   lightningInvoiceAutoPayLimit: number;
   logoutArmed: boolean;
-  passwordManagerSeedUsername: string;
   payWithCashuEnabled: boolean;
   pushToast: (message: string) => void;
   relayUrls: string[];

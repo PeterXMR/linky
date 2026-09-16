@@ -2,7 +2,6 @@ import { Effect, Either } from "effect";
 import type { MintRejected, MintUnreachable } from "../../domain/errors";
 import { unspentProofs } from "../../internal/proofStates";
 import type { ProofStateEntry } from "../../internal/proofStates";
-import { isKeysetVerificationError } from "../../mint/internal/loadWallet";
 import type { Proof } from "../../token/domain";
 
 /**
@@ -48,9 +47,25 @@ export type KeysetScan =
   | { readonly status: "unavailable" }
   | { readonly status: "skipped"; readonly detail: string };
 
+/**
+ * cashu-ts refuses keys that do not derive the advertised keyset id (NUT-02).
+ * Wallet loading propagates that as a `MintRejected` without a NUT error code,
+ * so the detail text is the only signal; a rescan cannot change the outcome.
+ */
+const isKeysetVerificationDetail = (detail: string): boolean => {
+  const message = detail.toLowerCase();
+  return (
+    message.includes("keyset verification failed") ||
+    message.includes("couldn't verify keyset id") ||
+    message.includes("short keyset id v2") ||
+    message.includes("got no keysets to map it to") ||
+    message.includes("couldn't map short keyset id")
+  );
+};
+
 const isDefinitiveRejection = (failure: MintFailure): failure is MintRejected =>
   failure._tag === "MintRejected" &&
-  (failure.code !== null || isKeysetVerificationError(failure.detail));
+  (failure.code !== null || isKeysetVerificationDetail(failure.detail));
 
 const nextCursorFrom = (
   ...positions: ReadonlyArray<number | null>
