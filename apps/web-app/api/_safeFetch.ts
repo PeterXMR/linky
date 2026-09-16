@@ -150,7 +150,10 @@ const pinnedTransport: Transport = {
         location: response.headers.get("location"),
       };
     } finally {
-      await agent.close();
+      // Bun's undici shim exposes no Agent.close() (and ignores the pinned
+      // connect.lookup, so address pinning is Node-only) — the pre-connect
+      // public-address check in fetchHop still runs on both runtimes.
+      if (typeof agent.close === "function") await agent.close();
     }
   },
 };
