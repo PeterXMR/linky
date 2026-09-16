@@ -438,11 +438,7 @@ registerRoute(
 registerRoute(
   new NavigationRoute(createHandlerBoundToURL("index.html"), {
     // Dev inspector page and collector endpoints must reach the dev server.
-    denylist: [
-      /^\/password-save\.html$/,
-      /^\/inspector\.html/,
-      /^\/__inspector\//,
-    ],
+    denylist: [/^\/inspector\.html/, /^\/__inspector\//],
   }),
 );
 

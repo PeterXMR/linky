@@ -953,23 +953,6 @@
   padding-right: 58px;
 }
 
-.onboarding-password-save-frame,
-.onboarding-password-save-form,
-.onboarding-password-save-input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  border: 0;
-  clip: rect(0 0 0 0);
-  clip-path: inset(50%);
-  white-space: nowrap;
-  opacity: 0;
-  pointer-events: none;
-}
-
 .onboarding-return-pasteBtn {
   position: absolute;
   top: 10px;

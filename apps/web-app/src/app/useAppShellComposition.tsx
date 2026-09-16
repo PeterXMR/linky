@@ -1681,11 +1681,6 @@ export const useAppShellComposition = ({
     advancedSettingsInput: {
       copyNostrKeys,
       copySeed,
-      passwordManagerSeedUsername: (
-        effectiveProfileName ??
-        currentNpub ??
-        ""
-      ).trim(),
       dedupeContacts,
       dedupeContactsIsBusy,
       defaultMintDisplay,

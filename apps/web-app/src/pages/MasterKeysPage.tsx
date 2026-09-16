@@ -1,24 +1,13 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { Copy, Eye, EyeOff, ShieldCheck } from "lucide-react";
 import { useAppShellCore } from "../app/context/AppShellContexts";
 import { useAdvancedSettingsContext } from "../app/context/SystemSettingsContexts";
-import {
-  PasswordManagerSaveForm,
-  type PasswordManagerSaveFormHandle,
-} from "../components/PasswordManagerSaveForm";
 
 export function MasterKeysPage(): React.ReactElement {
-  const {
-    copySeed,
-    passwordManagerSeedUsername,
-    pushToast,
-    saveSeedToPasswordManager,
-    seedMnemonic,
-  } = useAdvancedSettingsContext();
+  const { copySeed, pushToast, saveSeedToPasswordManager, seedMnemonic } =
+    useAdvancedSettingsContext();
   const { t } = useAppShellCore();
   const [isVisible, setIsVisible] = useState(false);
-  const passwordManagerSaveFormRef =
-    useRef<PasswordManagerSaveFormHandle | null>(null);
   const seedWords = useMemo(
     () =>
       (seedMnemonic ?? "")
@@ -34,8 +23,6 @@ export function MasterKeysPage(): React.ReactElement {
       pushToast(t("seedMissing"));
       return;
     }
-
-    passwordManagerSaveFormRef.current?.requestSave();
 
     const result = await saveSeedToPasswordManager();
     if (result === "failed") {
@@ -55,12 +42,6 @@ export function MasterKeysPage(): React.ReactElement {
 
   return (
     <section className="panel settings-page master-keys-page">
-      <PasswordManagerSaveForm
-        ref={passwordManagerSaveFormRef}
-        username={passwordManagerSeedUsername}
-        password={seedMnemonic ?? ""}
-      />
-
       <div className="master-keys-word-grid" aria-live="polite">
         {hasSeedMnemonic ? (
           seedWords.map((word, index) => (

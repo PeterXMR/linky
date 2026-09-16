@@ -30,6 +30,7 @@ The repo also contains a separate public website in `apps/site/` intended for `l
     - cashu (`cashu-n`)
     - messages (`messages-n`)
     - owner metadata (`ownerMeta`)
+- Seed backup uses the browser credential API where supported. Otherwise, use Show/Copy in Master keys and save the seed manually. Linky does not submit the seed to a server to trigger password saving.
 - If user pastes custom `nsec` during a SLIP-39 session, app switches to pasted key locally without immediate Evolu restore/write; choosing Derive switches back to seed-derived key.
 
 ## Owner rotation and limits
@@ -192,8 +193,9 @@ they are part of `bun run test`.
 End-to-end tests (Playwright) live in `apps/web-app/tests/*.spec.ts`.
 The `local-stack` runs the proxy-payment flow — three accounts on one machine, talking over the local
 Nostr relay and paying each other with the local Cashu mint — plus the linkshu storage-migration
-scenario, chat/edit/offline-reaction and top-up recovery, and signup with a real password-save
-form submission. Attachment tests send encrypted images and PDFs between browsers and verify
+scenario, chat/edit/offline-reaction and top-up recovery, and signup/manual password saving
+with checks that recovery seeds stay out of HTTP requests. Attachment tests send encrypted
+images and PDFs between browsers and verify
 decryption, seen receipts, downloads, and bytes handed to the browser sharing API. Owner-lane
 tests verify old and new contacts, messages, transactions, and tokens across devices and reloads.
 Boot and route tests cover fresh profiles, restore, unavailable browser storage, and navigation.
