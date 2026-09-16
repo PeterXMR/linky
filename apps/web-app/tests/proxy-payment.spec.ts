@@ -16,7 +16,7 @@
  * (service workers are blocked below), multi-mint candidate ordering,
  * npub.cash flows, EUR/bysquare payloads.
  */
-import { createRequire } from "node:module";
+import jsQR from "jsqr";
 import {
   expect,
   test,
@@ -325,33 +325,31 @@ test("proxy payment: bank details reach exactly one acceptor, who is paid in sat
 
       // Decode the rendered QR to prove the payload survived
       // offerer -> relay -> acceptor -> re-render byte for byte.
-      await winner.page.addScriptTag({
-        path: createRequire(import.meta.url).resolve("jsqr"),
-      });
-      const decoded = await winner.page.evaluate(async () => {
+      const pixels = await winner.page.evaluate(async () => {
         const img = document.querySelector<HTMLImageElement>(
           "img.bank-payment-offer-qr",
         );
-        if (!img) return null;
+        if (!img) throw new Error("Payment QR image missing");
         await img.decode();
         const canvas = document.createElement("canvas");
         canvas.width = img.naturalWidth;
         canvas.height = img.naturalHeight;
         const ctx = canvas.getContext("2d");
-        if (!ctx) return null;
+        if (!ctx) throw new Error("Canvas context unavailable");
         ctx.drawImage(img, 0, 0);
         const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const decode: unknown = Reflect.get(window, "jsQR");
-        if (typeof decode !== "function") return null;
-        const result: unknown = decode(data.data, canvas.width, canvas.height);
-        return typeof result === "object" &&
-          result !== null &&
-          "data" in result &&
-          typeof result.data === "string"
-          ? result.data
-          : null;
+        return {
+          data: Array.from(data.data),
+          width: data.width,
+          height: data.height,
+        };
       });
-      expect(decoded).toBe(SPD_PAYLOAD);
+      const decoded = jsQR(
+        new Uint8ClampedArray(pixels.data),
+        pixels.width,
+        pixels.height,
+      );
+      expect(decoded?.data).toBe(SPD_PAYLOAD);
     });
 
     await test.step("the winner marks the bank payment paid", async () => {

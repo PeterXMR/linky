@@ -15,6 +15,7 @@ const LOCAL_STACK_SPECS = [
   "**/password-manager-save.spec.ts",
   "**/profile-tilt-permission.spec.ts",
   "**/spayd-response.spec.ts",
+  "**/security-policy.spec.ts",
 ];
 
 export default defineConfig({

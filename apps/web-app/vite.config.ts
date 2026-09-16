@@ -1,7 +1,6 @@
 import basicSsl from "@vitejs/plugin-basic-ssl";
 import react from "@vitejs/plugin-react-swc";
 import { execSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import fs from "node:fs/promises";
 import type { ServerResponse } from "node:http";
@@ -11,6 +10,7 @@ import type { Connect, Plugin, ViteDevServer } from "vite";
 import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 import lnurlpHandler from "./api/lnurlp.js";
+import { contentSecurityPolicyMeta } from "./server/contentSecurityPolicy";
 import { bootDiagnosticRedaction } from "./server/bootDiagnosticRedaction";
 import { inspectorCollector } from "./server/inspectorCollector";
 import { fetchLinkPreview } from "./server/linkPreview";
@@ -179,57 +179,6 @@ const linkPreviewApi = (): Plugin => ({
     );
   },
 });
-
-// Content-Security-Policy as a build-time <meta>, so it ships with the document
-// on every deployment (Vercel, the self-host nginx shim, and the native shell)
-// without per-server config. Header-only directives (frame-ancestors) and the
-// non-CSP security headers live in vercel.json and the nginx vhost instead.
-//
-// script-src carries a sha256 of each inline script so the boot shell keeps
-// running while injected inline scripts stay blocked — the hash is recomputed
-// from the emitted HTML every build, so editing the boot script never drifts it.
-// Dev is skipped: Vite's HMR client injects inline scripts and eval.
-const contentSecurityPolicyMeta = (): Plugin => {
-  const hashInlineScripts = (html: string): string[] => {
-    const hashes: string[] = [];
-    const pattern = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi;
-    for (let match = pattern.exec(html); match; match = pattern.exec(html)) {
-      const digest = createHash("sha256").update(match[1]).digest("base64");
-      hashes.push(`'sha256-${digest}'`);
-    }
-    return hashes;
-  };
-
-  const policy = (scriptHashes: string[]): string =>
-    [
-      "default-src 'self'",
-      "base-uri 'self'",
-      "object-src 'none'",
-      "frame-src 'none'",
-      "child-src 'self' blob:",
-      "worker-src 'self' blob:",
-      "manifest-src 'self'",
-      `script-src 'self' 'wasm-unsafe-eval' ${scriptHashes.join(" ")}`,
-      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-      "font-src 'self' https://fonts.gstatic.com data:",
-      "img-src 'self' data: blob: https:",
-      "media-src 'self' blob: data:",
-      "connect-src 'self' https: wss: blob: data:",
-      "form-action 'self'",
-    ].join("; ");
-
-  return {
-    name: "csp-meta",
-    apply: "build",
-    enforce: "post",
-    transformIndexHtml(html) {
-      const meta = `<meta http-equiv="Content-Security-Policy" content="${policy(
-        hashInlineScripts(html),
-      )}" />`;
-      return html.replace("</title>", `</title>\n    ${meta}`);
-    },
-  };
-};
 
 export default defineConfig({
   define: {
