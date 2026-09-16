@@ -1,7 +1,74 @@
-import { Schema } from "effect";
+import {
+  expect,
+  type Page,
+  type WebSocket as PlaywrightWebSocket,
+} from "@playwright/test";
+import { Option, Schema } from "effect";
 import { nip19 } from "nostr-tools";
 
 const LOCAL_RELAY_URL = "ws://localhost:7777";
+
+const decodeSubscriptionFrame = Schema.decodeUnknownOption(
+  Schema.parseJson(
+    Schema.Union(
+      Schema.Tuple(
+        Schema.Literal("REQ"),
+        Schema.String,
+        Schema.Struct({
+          kinds: Schema.Array(Schema.Number),
+          "#p": Schema.Array(Schema.String),
+        }),
+      ),
+      Schema.Tuple(Schema.Literal("EOSE", "CLOSE"), Schema.String),
+    ),
+  ),
+);
+
+/** Register before navigation; wallet rendering precedes the inbox subscription. */
+export const watchNostrInbox = (
+  page: Page,
+  npub: string,
+): (() => Promise<void>) => {
+  const pubkey = npubToHex(npub);
+  const readySockets = new Set<PlaywrightWebSocket>();
+  page.on("websocket", (socket) => {
+    if (socket.url().replace(/\/$/, "") !== LOCAL_RELAY_URL) return;
+    let inboxSubscriptionId: string | null = null;
+    socket.on("framesent", ({ payload }) => {
+      const decoded = decodeSubscriptionFrame(String(payload));
+      if (Option.isNone(decoded)) return;
+      const frame = decoded.value;
+      if (
+        frame[0] === "REQ" &&
+        frame[2].kinds.includes(1059) &&
+        frame[2]["#p"].includes(pubkey)
+      ) {
+        inboxSubscriptionId = frame[1];
+        readySockets.delete(socket);
+      } else if (frame[0] === "CLOSE" && frame[1] === inboxSubscriptionId) {
+        inboxSubscriptionId = null;
+        readySockets.delete(socket);
+      }
+    });
+    socket.on("framereceived", ({ payload }) => {
+      const decoded = decodeSubscriptionFrame(String(payload));
+      if (Option.isNone(decoded)) return;
+      const frame = decoded.value;
+      if (frame[0] === "EOSE" && frame[1] === inboxSubscriptionId) {
+        readySockets.add(socket);
+      }
+    });
+    socket.on("close", () => readySockets.delete(socket));
+  });
+  return async () => {
+    await expect
+      .poll(() => readySockets.size, {
+        message: "the app's gift-wrap inbox has subscribed and received EOSE",
+        timeout: 30_000,
+      })
+      .toBeGreaterThan(0);
+  };
+};
 
 const npubToHex = (npub: string): string => {
   const decoded = nip19.decode(npub);
