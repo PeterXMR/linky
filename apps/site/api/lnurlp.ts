@@ -77,7 +77,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       );
     }
     sendProxyResult(res, await safeFetch(callback));
-  } catch (error) {
-    sendProxyFailure(res, error);
+  } catch {
+    sendProxyFailure(res);
   }
 }

@@ -102,10 +102,7 @@ describe("lnurlp handler", () => {
     const sent = await run({ address: "alice@127.0.0.1.nip.io" });
 
     expect(sent.status).toBe(502);
-    expect(JSON.parse(sent.body)).toMatchObject({
-      error: "Proxy fetch failed",
-      detail: expect.stringContaining("non-public"),
-    });
+    expect(JSON.parse(sent.body)).toEqual({ error: "Proxy fetch failed" });
     expect(lookup).toHaveBeenCalledWith("127.0.0.1.nip.io", { all: true });
     expect(undiciFetch).not.toHaveBeenCalled();
   });

@@ -79,11 +79,8 @@ export const sendPublicProxyResult = (
   sendProxyResult(res, result);
 };
 
-export const sendProxyFailure = (res: ApiResponse, error: unknown): void => {
-  res.status(502).json({
-    error: "Proxy fetch failed",
-    detail: String(error ?? "unknown"),
-  });
+export const sendProxyFailure = (res: ApiResponse): void => {
+  res.status(502).json({ error: "Proxy fetch failed" });
 };
 
 export type { ApiRequest, ApiResponse };
