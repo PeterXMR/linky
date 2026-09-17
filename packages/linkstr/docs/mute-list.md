@@ -1,6 +1,6 @@
 # Mute list
 
-`MuteList` publishes your NIP-51 mute list: a kind 10000 event with one `p` tag per blocked pubkey. It is a plain signed event, not gift-wrapped, and replaces the previous list on relays. Publish it whenever the local block list changes so other clients on the same key honour it.
+`MuteList` publishes your NIP-51 mute list: a kind 10000 event whose blocked pubkeys are NIP-44-encrypted into `content` as private entries, with no public tags. It is a plain signed event, not gift-wrapped, and replaces the previous list on relays. Publish it whenever the local block list changes so other clients on the same key honour it.
 
 Publishing does not block anyone by itself. Muting is enforced on receive by you, not by linkstr: `WrapInbox` still delivers wraps from muted senders, so check `from` against your block list in the inbox handler (see [Loading and enforcing the list](#loading-and-enforcing-the-list)).
 
@@ -71,11 +71,11 @@ There is no draft class: `publishMuteList(pubkeys: ReadonlyArray<Pubkey>)` takes
 
 `PlainEventReceipt` carries `eventId`, `kind` (10000), `sentAt`, `results: RelayPublishResult[]`, and `.accepted`.
 
-Direct only.
+Direct only. The muted pubkeys are NIP-51 private entries: linkstr encrypts the `["p", …]` tag array into `content` with NIP-44 under your own key and publishes no public tags, so relays and observers cannot read who you blocked. Only you can decrypt the list, which is why cross-client honouring relies on the same key loading it back.
 
 ## Wire format
 
-`muteList/MuteList.ts`. Kind 10000, plain and replaceable: one `["p", pubkey]` per muted contact, empty content, no encrypted section. Anyone can read the list; moving it into encrypted content is tracked in linky-fit/linky#262.
+`muteList/MuteList.ts`. Kind 10000, plain and replaceable: no public tags, and `content` is the JSON array of `["p", pubkey]` entries encrypted with NIP-44 under the conversation key of your own pubkey, as NIP-51 private entries. Only the holder of the key can read the list.
 
 ## Loading and enforcing the list
 
